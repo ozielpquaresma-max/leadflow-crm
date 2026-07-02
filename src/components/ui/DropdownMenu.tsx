@@ -51,12 +51,12 @@ export function DropdownMenu({
 
   return (
     <div className={cn('relative inline-block', className)} ref={menuRef}>
-      <button
+      <div
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center justify-center"
+        className="inline-block cursor-pointer"
       >
         {trigger}
-      </button>
+      </div>
 
       {isOpen && (
         <div

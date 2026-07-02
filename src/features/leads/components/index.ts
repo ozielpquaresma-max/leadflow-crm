@@ -2,4 +2,6 @@
  * @file Leads components export
  */
 
-// Export leads components here
+export { LeadsStatsCard } from './LeadsStatsCard'
+export { LeadsTable } from './LeadsTable'
+export { LeadsFilter } from './LeadsFilter'
