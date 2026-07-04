@@ -19,6 +19,19 @@ type InteractionData = {
   resultado: string;
 };
 
+type RecoveryStatus =
+  | "convertido"
+  | "aguardando_resposta"
+  | "sem_resposta"
+  | "perdido";
+
+const recoveryStatusLabels: Record<RecoveryStatus, string> = {
+  convertido: "Convertido",
+  aguardando_resposta: "Aguardar",
+  sem_resposta: "Sem resposta",
+  perdido: "Perdido",
+};
+
 export function RecoveryActions({
   empresaId,
   clienteId,
@@ -32,6 +45,12 @@ export function RecoveryActions({
   const [registeringWhatsapp, setRegisteringWhatsapp] = useState(false);
   const [registeringCheckout, setRegisteringCheckout] = useState(false);
   const [copyingPix, setCopyingPix] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState<RecoveryStatus | null>(
+    null
+  );
+  const [selectedStatus, setSelectedStatus] = useState<RecoveryStatus | null>(
+    null
+  );
 
   const hasWhatsapp = Boolean(whatsappUrl && whatsappUrl !== "#");
   const hasCheckout = Boolean(checkoutUrl);
@@ -117,55 +136,152 @@ export function RecoveryActions({
     }
   }
 
+  async function handleUpdateRecoveryStatus(status: RecoveryStatus) {
+    setUpdatingStatus(status);
+
+    try {
+      const { error } = await supabase
+        .from("pedidos")
+        .update({
+          status_recuperacao: status,
+          recuperacao_atualizada_em: new Date().toISOString(),
+        })
+        .eq("id", pedidoId);
+
+      if (error) {
+        console.error("Erro ao atualizar status da recuperação:", error.message);
+        return;
+      }
+
+      await registerInteraction({
+        canal: "sistema",
+        mensagem: `Recuperação marcada como: ${recoveryStatusLabels[status]}.`,
+        resultado: status,
+      });
+
+      setSelectedStatus(status);
+    } finally {
+      setUpdatingStatus(null);
+    }
+  }
+
+  function getStatusButtonClass(status: RecoveryStatus) {
+    const isSelected = selectedStatus === status;
+
+    if (status === "convertido") {
+      return isSelected
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700";
+    }
+
+    if (status === "aguardando_resposta") {
+      return isSelected
+        ? "border-blue-200 bg-blue-50 text-blue-700"
+        : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700";
+    }
+
+    if (status === "sem_resposta") {
+      return isSelected
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-slate-200 bg-white text-slate-700 hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700";
+    }
+
+    return isSelected
+      ? "border-red-200 bg-red-50 text-red-700"
+      : "border-slate-200 bg-white text-slate-700 hover:border-red-200 hover:bg-red-50 hover:text-red-700";
+  }
+
   return (
-    <div className="w-full max-w-[240px] space-y-2">
-      <button
-        type="button"
-        onClick={handleOpenWhatsApp}
-        disabled={registeringWhatsapp || !hasWhatsapp}
-        className="flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
-      >
-        {registeringWhatsapp ? "Registrando..." : "Chamar no WhatsApp"}
-      </button>
+    <div className="w-full max-w-[260px] space-y-3">
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={handleOpenWhatsApp}
+          disabled={registeringWhatsapp || !hasWhatsapp}
+          className="flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+        >
+          {registeringWhatsapp ? "Registrando..." : "Chamar no WhatsApp"}
+        </button>
 
-      <div className="grid grid-cols-2 gap-2">
-        {hasCheckout ? (
-          <button
-            type="button"
-            onClick={handleOpenCheckout}
-            disabled={registeringCheckout}
-            className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {registeringCheckout ? "Abrindo..." : "Checkout"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled
-            className="flex cursor-not-allowed items-center justify-center rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-300"
-          >
-            Checkout
-          </button>
-        )}
+        <div className="grid grid-cols-2 gap-2">
+          {hasCheckout ? (
+            <button
+              type="button"
+              onClick={handleOpenCheckout}
+              disabled={registeringCheckout}
+              className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {registeringCheckout ? "Abrindo..." : "Checkout"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="flex cursor-not-allowed items-center justify-center rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-300"
+            >
+              Checkout
+            </button>
+          )}
 
-        {hasPix ? (
-          <button
-            type="button"
-            onClick={handleCopyPix}
-            disabled={copyingPix}
-            className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {copyingPix ? "Copiando..." : copied ? "Copiado" : "PIX"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled
-            className="flex cursor-not-allowed items-center justify-center rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-300"
-          >
-            PIX
-          </button>
-        )}
+          {hasPix ? (
+            <button
+              type="button"
+              onClick={handleCopyPix}
+              disabled={copyingPix}
+              className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {copyingPix ? "Copiando..." : copied ? "Copiado" : "PIX"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="flex cursor-not-allowed items-center justify-center rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-300"
+            >
+              PIX
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="border-t border-slate-100 pt-3">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Resultado
+        </p>
+
+        <div className="grid grid-cols-2 gap-2">
+          {(
+            [
+              "convertido",
+              "aguardando_resposta",
+              "sem_resposta",
+              "perdido",
+            ] as RecoveryStatus[]
+          ).map((status) => (
+            <button
+              key={status}
+              type="button"
+              onClick={() => handleUpdateRecoveryStatus(status)}
+              disabled={updatingStatus !== null}
+              className={`flex items-center justify-center rounded-xl border px-3 py-2 text-[11px] font-bold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${getStatusButtonClass(
+                status
+              )}`}
+            >
+              {updatingStatus === status
+                ? "Salvando..."
+                : recoveryStatusLabels[status]}
+            </button>
+          ))}
+        </div>
+
+        {selectedStatus ? (
+          <p className="mt-2 text-[11px] font-medium text-slate-500">
+            Marcado como{" "}
+            <span className="font-semibold text-slate-700">
+              {recoveryStatusLabels[selectedStatus]}
+            </span>
+          </p>
+        ) : null}
       </div>
     </div>
   );
