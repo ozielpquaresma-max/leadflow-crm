@@ -3,6 +3,8 @@ import { supabase } from "@/lib/supabase";
 
 type RecuperacaoVenda = {
   pedido_id: string;
+  empresa_id: string | null;
+  cliente_id: string | null;
   cliente_nome: string | null;
   cliente_email: string | null;
   cliente_telefone: string | null;
@@ -45,16 +47,20 @@ function formatTempo(minutos: number | null) {
   return `${dias} dia${dias > 1 ? "s" : ""}`;
 }
 
+function getWhatsAppMessage(venda: RecuperacaoVenda) {
+  return `Olá, ${
+    venda.cliente_nome || "tudo bem"
+  }! Vi que você iniciou a compra do produto ${
+    venda.produto_nome || ""
+  }, mas o pagamento ainda não foi concluído. Posso te ajudar a finalizar agora?`;
+}
+
 function getWhatsAppLink(venda: RecuperacaoVenda) {
   const telefone = venda.cliente_telefone?.replace(/\D/g, "");
 
   if (!telefone) return "#";
 
-  const mensagem = `Olá, ${
-    venda.cliente_nome || "tudo bem"
-  }! Vi que você iniciou a compra do produto ${
-    venda.produto_nome || ""
-  }, mas o pagamento ainda não foi concluído. Posso te ajudar a finalizar agora?`;
+  const mensagem = getWhatsAppMessage(venda);
 
   return `https://wa.me/55${telefone}?text=${encodeURIComponent(mensagem)}`;
 }
@@ -164,59 +170,67 @@ export default async function RecuperacaoPage() {
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-              {vendas.map((venda) => (
-                <tr key={venda.pedido_id} className="hover:bg-slate-50">
-                  <td className="px-5 py-4">
-                    <div>
-                      <p className="font-semibold text-slate-950">
-                        {venda.cliente_nome}
-                      </p>
+              {vendas.map((venda) => {
+                const whatsappMessage = getWhatsAppMessage(venda);
 
-                      <p className="text-xs text-slate-500">
-                        {venda.cliente_email}
-                      </p>
+                return (
+                  <tr key={venda.pedido_id} className="hover:bg-slate-50">
+                    <td className="px-5 py-4">
+                      <div>
+                        <p className="font-semibold text-slate-950">
+                          {venda.cliente_nome}
+                        </p>
 
-                      <p className="text-xs text-slate-500">
-                        {venda.cliente_telefone}
-                      </p>
-                    </div>
-                  </td>
+                        <p className="text-xs text-slate-500">
+                          {venda.cliente_email}
+                        </p>
 
-                  <td className="px-5 py-4 text-slate-700">
-                    {venda.produto_nome}
-                  </td>
+                        <p className="text-xs text-slate-500">
+                          {venda.cliente_telefone}
+                        </p>
+                      </div>
+                    </td>
 
-                  <td className="px-5 py-4 text-slate-700">
-                    {venda.plataforma_nome}
-                  </td>
+                    <td className="px-5 py-4 text-slate-700">
+                      {venda.produto_nome}
+                    </td>
 
-                  <td className="px-5 py-4">
-                    <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
-                      {venda.status_label}
-                    </span>
-                  </td>
+                    <td className="px-5 py-4 text-slate-700">
+                      {venda.plataforma_nome}
+                    </td>
 
-                  <td className="px-5 py-4 text-slate-700">
-                    {venda.metodo_pagamento}
-                  </td>
+                    <td className="px-5 py-4">
+                      <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
+                        {venda.status_label}
+                      </span>
+                    </td>
 
-                  <td className="px-5 py-4 font-semibold text-slate-950">
-                    {formatCurrency(venda.valor)}
-                  </td>
+                    <td className="px-5 py-4 text-slate-700">
+                      {venda.metodo_pagamento}
+                    </td>
 
-                  <td className="px-5 py-4 text-slate-700">
-                    {formatTempo(venda.minutos_desde_criacao)}
-                  </td>
+                    <td className="px-5 py-4 font-semibold text-slate-950">
+                      {formatCurrency(venda.valor)}
+                    </td>
 
-                  <td className="px-5 py-4">
-                    <RecoveryActions
-                      whatsappUrl={getWhatsAppLink(venda)}
-                      checkoutUrl={venda.checkout_url}
-                      pixCode={venda.pix_copia_cola}
-                    />
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-5 py-4 text-slate-700">
+                      {formatTempo(venda.minutos_desde_criacao)}
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <RecoveryActions
+                        empresaId={venda.empresa_id}
+                        clienteId={venda.cliente_id}
+                        pedidoId={venda.pedido_id}
+                        whatsappUrl={getWhatsAppLink(venda)}
+                        whatsappMessage={whatsappMessage}
+                        checkoutUrl={venda.checkout_url}
+                        pixCode={venda.pix_copia_cola}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
 
               {vendas.length === 0 ? (
                 <tr>
