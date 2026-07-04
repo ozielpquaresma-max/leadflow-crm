@@ -1,3 +1,4 @@
+import { RecoveryActions } from "@/features/recoveries/components/RecoveryActions";
 import { supabase } from "@/lib/supabase";
 
 type RecuperacaoVenda = {
@@ -49,7 +50,11 @@ function getWhatsAppLink(venda: RecuperacaoVenda) {
 
   if (!telefone) return "#";
 
-  const mensagem = `Olá, ${venda.cliente_nome || "tudo bem"}! Vi que você iniciou a compra do produto ${venda.produto_nome || ""}, mas o pagamento ainda não foi concluído. Posso te ajudar a finalizar agora?`;
+  const mensagem = `Olá, ${
+    venda.cliente_nome || "tudo bem"
+  }! Vi que você iniciou a compra do produto ${
+    venda.produto_nome || ""
+  }, mas o pagamento ainda não foi concluído. Posso te ajudar a finalizar agora?`;
 
   return `https://wa.me/55${telefone}?text=${encodeURIComponent(mensagem)}`;
 }
@@ -67,19 +72,32 @@ export default async function RecuperacaoPage() {
     return total + Number(venda.valor || 0);
   }, 0);
 
-  const pixPendentes = vendas.filter((venda) => venda.status === "pix_pendente").length;
-  const checkoutAbandonado = vendas.filter((venda) => venda.status === "checkout_abandonado").length;
-  const cartaoRecusado = vendas.filter((venda) => venda.status === "cartao_recusado").length;
+  const pixPendentes = vendas.filter(
+    (venda) => venda.status === "pix_pendente"
+  ).length;
+
+  const checkoutAbandonado = vendas.filter(
+    (venda) => venda.status === "checkout_abandonado"
+  ).length;
+
+  const cartaoRecusado = vendas.filter(
+    (venda) => venda.status === "cartao_recusado"
+  ).length;
 
   return (
     <div className="space-y-8">
       <div>
-        <p className="text-sm font-medium text-blue-600">Recuperação de Vendas</p>
+        <p className="text-sm font-medium text-blue-600">
+          Recuperação de Vendas
+        </p>
+
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
           Vendas pendentes
         </h1>
+
         <p className="mt-2 max-w-2xl text-slate-600">
-          Acompanhe PIX pendentes, checkouts abandonados e pagamentos recusados para recuperar vendas em tempo real.
+          Acompanhe PIX pendentes, checkouts abandonados e pagamentos recusados
+          para recuperar vendas em tempo real.
         </p>
       </div>
 
@@ -99,17 +117,23 @@ export default async function RecuperacaoPage() {
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-500">PIX pendente</p>
-          <p className="mt-2 text-2xl font-bold text-slate-950">{pixPendentes}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-950">
+            {pixPendentes}
+          </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-500">Checkout abandonado</p>
-          <p className="mt-2 text-2xl font-bold text-slate-950">{checkoutAbandonado}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-950">
+            {checkoutAbandonado}
+          </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-500">Cartão recusado</p>
-          <p className="mt-2 text-2xl font-bold text-slate-950">{cartaoRecusado}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-950">
+            {cartaoRecusado}
+          </p>
         </div>
       </div>
 
@@ -118,6 +142,7 @@ export default async function RecuperacaoPage() {
           <h2 className="text-lg font-semibold text-slate-950">
             Lista de oportunidades de recuperação
           </h2>
+
           <p className="mt-1 text-sm text-slate-500">
             Priorize contatos recentes e pedidos com maior chance de conversão.
           </p>
@@ -143,15 +168,27 @@ export default async function RecuperacaoPage() {
                 <tr key={venda.pedido_id} className="hover:bg-slate-50">
                   <td className="px-5 py-4">
                     <div>
-                      <p className="font-semibold text-slate-950">{venda.cliente_nome}</p>
-                      <p className="text-xs text-slate-500">{venda.cliente_email}</p>
-                      <p className="text-xs text-slate-500">{venda.cliente_telefone}</p>
+                      <p className="font-semibold text-slate-950">
+                        {venda.cliente_nome}
+                      </p>
+
+                      <p className="text-xs text-slate-500">
+                        {venda.cliente_email}
+                      </p>
+
+                      <p className="text-xs text-slate-500">
+                        {venda.cliente_telefone}
+                      </p>
                     </div>
                   </td>
 
-                  <td className="px-5 py-4 text-slate-700">{venda.produto_nome}</td>
+                  <td className="px-5 py-4 text-slate-700">
+                    {venda.produto_nome}
+                  </td>
 
-                  <td className="px-5 py-4 text-slate-700">{venda.plataforma_nome}</td>
+                  <td className="px-5 py-4 text-slate-700">
+                    {venda.plataforma_nome}
+                  </td>
 
                   <td className="px-5 py-4">
                     <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
@@ -159,7 +196,9 @@ export default async function RecuperacaoPage() {
                     </span>
                   </td>
 
-                  <td className="px-5 py-4 text-slate-700">{venda.metodo_pagamento}</td>
+                  <td className="px-5 py-4 text-slate-700">
+                    {venda.metodo_pagamento}
+                  </td>
 
                   <td className="px-5 py-4 font-semibold text-slate-950">
                     {formatCurrency(venda.valor)}
@@ -170,38 +209,21 @@ export default async function RecuperacaoPage() {
                   </td>
 
                   <td className="px-5 py-4">
-                    <div className="flex flex-wrap gap-2">
-                      <a
-                        href={getWhatsAppLink(venda)}
-                        target="_blank"
-                        className="rounded-xl bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
-                      >
-                        WhatsApp
-                      </a>
-
-                      {venda.checkout_url ? (
-                        <a
-                          href={venda.checkout_url}
-                          target="_blank"
-                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          Checkout
-                        </a>
-                      ) : null}
-
-                      {venda.pix_copia_cola ? (
-                        <button className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                          PIX disponível
-                        </button>
-                      ) : null}
-                    </div>
+                    <RecoveryActions
+                      whatsappUrl={getWhatsAppLink(venda)}
+                      checkoutUrl={venda.checkout_url}
+                      pixCode={venda.pix_copia_cola}
+                    />
                   </td>
                 </tr>
               ))}
 
               {vendas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-10 text-center text-slate-500">
+                  <td
+                    colSpan={8}
+                    className="px-5 py-10 text-center text-slate-500"
+                  >
                     Nenhuma venda pendente encontrada.
                   </td>
                 </tr>
