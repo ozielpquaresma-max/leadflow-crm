@@ -19,6 +19,10 @@ type RecuperacaoVenda = {
   pix_qrcode_url: string | null;
   minutos_desde_criacao: number | null;
   prioridade_recuperacao: number | null;
+  ultima_interacao_em: string | null;
+  ultima_interacao_canal: string | null;
+  ultima_interacao_resultado: string | null;
+  total_interacoes: number | null;
 };
 
 function formatCurrency(value: number | null) {
@@ -45,6 +49,32 @@ function formatTempo(minutos: number | null) {
 
   const dias = Math.floor(horas / 24);
   return `${dias} dia${dias > 1 ? "s" : ""}`;
+}
+
+function formatDataContato(data: string | null) {
+  if (!data) return "Sem contato";
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(data));
+}
+
+function formatResultado(resultado: string | null) {
+  if (!resultado) return "Nenhum";
+
+  const labels: Record<string, string> = {
+    whatsapp_aberto: "WhatsApp aberto",
+    mensagem_enviada: "Mensagem enviada",
+    aguardando_resposta: "Aguardando resposta",
+    convertido: "Convertido",
+    sem_resposta: "Sem resposta",
+  };
+
+  return labels[resultado] || resultado;
 }
 
 function getWhatsAppMessage(venda: RecuperacaoVenda) {
@@ -155,7 +185,7 @@ export default async function RecuperacaoPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1000px] text-left text-sm">
+          <table className="w-full min-w-[1200px] text-left text-sm">
             <thead className="border-b border-slate-100 bg-slate-50 text-slate-500">
               <tr>
                 <th className="px-5 py-4 font-medium">Cliente</th>
@@ -165,6 +195,7 @@ export default async function RecuperacaoPage() {
                 <th className="px-5 py-4 font-medium">Pagamento</th>
                 <th className="px-5 py-4 font-medium">Valor</th>
                 <th className="px-5 py-4 font-medium">Tempo</th>
+                <th className="px-5 py-4 font-medium">Contato</th>
                 <th className="px-5 py-4 font-medium">Ações</th>
               </tr>
             </thead>
@@ -218,6 +249,23 @@ export default async function RecuperacaoPage() {
                     </td>
 
                     <td className="px-5 py-4">
+                      <div>
+                        <p className="font-medium text-slate-950">
+                          {formatResultado(venda.ultima_interacao_resultado)}
+                        </p>
+
+                        <p className="text-xs text-slate-500">
+                          {formatDataContato(venda.ultima_interacao_em)}
+                        </p>
+
+                        <p className="text-xs text-slate-500">
+                          {venda.total_interacoes || 0} tentativa
+                          {(venda.total_interacoes || 0) === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                    </td>
+
+                    <td className="px-5 py-4">
                       <RecoveryActions
                         empresaId={venda.empresa_id}
                         clienteId={venda.cliente_id}
@@ -235,7 +283,7 @@ export default async function RecuperacaoPage() {
               {vendas.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-5 py-10 text-center text-slate-500"
                   >
                     Nenhuma venda pendente encontrada.
