@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const kiwifyWebhookSecret = process.env.KIWIFY_WEBHOOK_SECRET;
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error("Supabase não configurado.");
@@ -137,6 +138,22 @@ function slugify(value: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!kiwifyWebhookSecret) {
+      return NextResponse.json(
+        { ok: false, error: "Webhook secret não configurado." },
+        { status: 500 }
+      );
+    }
+
+    const receivedSecret = request.headers.get("x-webhook-secret");
+
+    if (receivedSecret !== kiwifyWebhookSecret) {
+      return NextResponse.json(
+        { ok: false, error: "Webhook não autorizado." },
+        { status: 401 }
+      );
+    }
+
     const payload = (await request.json()) as KiwifyPayload;
 
     const { data: empresa } = await supabase
