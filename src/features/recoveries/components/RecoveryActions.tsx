@@ -23,12 +23,74 @@ export function RecoveryActions({
   pixCode,
 }: RecoveryActionsProps) {
   const [copied, setCopied] = useState(false);
-  const [registering, setRegistering] = useState(false);
+  const [registeringWhatsapp, setRegisteringWhatsapp] = useState(false);
+  const [registeringCheckout, setRegisteringCheckout] = useState(false);
+
+  async function registerInteraction({
+    canal,
+    mensagem,
+    resultado,
+  }: {
+    canal: string;
+    mensagem: string;
+    resultado: string;
+  }) {
+    const { error } = await supabase.from("interacoes").insert({
+      empresa_id: empresaId,
+      cliente_id: clienteId,
+      pedido_id: pedidoId,
+      tipo: "recuperacao_manual",
+      canal,
+      mensagem,
+      resultado,
+    });
+
+    if (error) {
+      console.error("Erro ao registrar interação:", error.message);
+    }
+  }
+
+  async function handleOpenWhatsApp() {
+    if (!whatsappUrl || whatsappUrl === "#") return;
+
+    setRegisteringWhatsapp(true);
+
+    await registerInteraction({
+      canal: "whatsapp",
+      mensagem: whatsappMessage,
+      resultado: "whatsapp_aberto",
+    });
+
+    setRegisteringWhatsapp(false);
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+  }
+
+  async function handleOpenCheckout() {
+    if (!checkoutUrl) return;
+
+    setRegisteringCheckout(true);
+
+    await registerInteraction({
+      canal: "checkout",
+      mensagem: "Checkout aberto pelo atendente durante a recuperação.",
+      resultado: "checkout_aberto",
+    });
+
+    setRegisteringCheckout(false);
+    window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+  }
 
   async function handleCopyPix() {
     if (!pixCode) return;
 
     await navigator.clipboard.writeText(pixCode);
+
+    await registerInteraction({
+      canal: "pix",
+      mensagem: "Código PIX copia e cola copiado pelo atendente.",
+      resultado: "pix_copiado",
+    });
+
     setCopied(true);
 
     setTimeout(() => {
@@ -36,49 +98,26 @@ export function RecoveryActions({
     }, 2000);
   }
 
-  async function handleOpenWhatsApp() {
-    if (!whatsappUrl || whatsappUrl === "#") return;
-
-    setRegistering(true);
-
-    const { error } = await supabase.from("interacoes").insert({
-      empresa_id: empresaId,
-      cliente_id: clienteId,
-      pedido_id: pedidoId,
-      tipo: "recuperacao_manual",
-      canal: "whatsapp",
-      mensagem: whatsappMessage,
-      resultado: "whatsapp_aberto",
-    });
-
-    if (error) {
-      console.error("Erro ao registrar interação:", error.message);
-    }
-
-    setRegistering(false);
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-  }
-
   return (
     <div className="flex flex-wrap gap-2">
       <button
         type="button"
         onClick={handleOpenWhatsApp}
-        disabled={registering || whatsappUrl === "#"}
+        disabled={registeringWhatsapp || whatsappUrl === "#"}
         className="rounded-xl bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {registering ? "Registrando..." : "WhatsApp"}
+        {registeringWhatsapp ? "Registrando..." : "WhatsApp"}
       </button>
 
       {checkoutUrl ? (
-        <a
-          href={checkoutUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+        <button
+          type="button"
+          onClick={handleOpenCheckout}
+          disabled={registeringCheckout}
+          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Checkout
-        </a>
+          {registeringCheckout ? "Abrindo..." : "Checkout"}
+        </button>
       ) : null}
 
       {pixCode ? (

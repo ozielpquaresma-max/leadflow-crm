@@ -68,6 +68,8 @@ function formatResultado(resultado: string | null) {
 
   const labels: Record<string, string> = {
     whatsapp_aberto: "WhatsApp aberto",
+    checkout_aberto: "Checkout aberto",
+    pix_copiado: "PIX copiado",
     mensagem_enviada: "Mensagem enviada",
     aguardando_resposta: "Aguardando resposta",
     convertido: "Convertido",
