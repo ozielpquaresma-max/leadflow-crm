@@ -23,6 +23,8 @@ type RecuperacaoVenda = {
   ultima_interacao_canal: string | null;
   ultima_interacao_resultado: string | null;
   total_interacoes: number | null;
+  status_recuperacao: string | null;
+  recuperacao_atualizada_em: string | null;
 };
 
 function formatCurrency(value: number | null) {
@@ -74,6 +76,7 @@ function formatResultado(resultado: string | null) {
     aguardando_resposta: "Aguardando resposta",
     convertido: "Convertido",
     sem_resposta: "Sem resposta",
+    perdido: "Perdido",
   };
 
   return labels[resultado] || resultado;
@@ -93,6 +96,30 @@ function formatPagamento(pagamento: string | null) {
   return labels[pagamento] || pagamento;
 }
 
+function formatStatusRecuperacao(status: string | null) {
+  if (!status || status === "pendente") return "Pendente";
+
+  const labels: Record<string, string> = {
+    convertido: "Convertido",
+    aguardando_resposta: "Aguardando",
+    sem_resposta: "Sem resposta",
+    perdido: "Perdido",
+  };
+
+  return labels[status] || status;
+}
+
+function formatDataStatusRecuperacao(data: string | null) {
+  if (!data) return "Ainda não atualizado";
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(data));
+}
+
 function getStatusClass(status: string | null) {
   if (status === "pix_pendente") {
     return "bg-amber-50 text-amber-700 ring-amber-100";
@@ -107,6 +134,26 @@ function getStatusClass(status: string | null) {
   }
 
   return "bg-slate-50 text-slate-700 ring-slate-100";
+}
+
+function getStatusRecuperacaoClass(status: string | null) {
+  if (status === "convertido") {
+    return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+  }
+
+  if (status === "aguardando_resposta") {
+    return "bg-blue-50 text-blue-700 ring-blue-100";
+  }
+
+  if (status === "sem_resposta") {
+    return "bg-amber-50 text-amber-700 ring-amber-100";
+  }
+
+  if (status === "perdido") {
+    return "bg-red-50 text-red-700 ring-red-100";
+  }
+
+  return "bg-slate-50 text-slate-600 ring-slate-100";
 }
 
 function getWhatsAppMessage(venda: RecuperacaoVenda) {
@@ -157,6 +204,10 @@ export default async function RecuperacaoPage() {
     (venda) => venda.status === "cartao_recusado"
   ).length;
 
+  const convertidos = vendas.filter(
+    (venda) => venda.status_recuperacao === "convertido"
+  ).length;
+
   const cards = [
     {
       label: "Valor em aberto",
@@ -201,6 +252,11 @@ export default async function RecuperacaoPage() {
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
           <span className="font-semibold text-slate-950">{vendas.length}</span>{" "}
           oportunidade{vendas.length === 1 ? "" : "s"} em aberto
+          {convertidos > 0 ? (
+            <span className="ml-2 text-emerald-600">
+              • {convertidos} convertido{convertidos === 1 ? "" : "s"}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -235,8 +291,8 @@ export default async function RecuperacaoPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Priorize contatos recentes e pedidos com maior chance de
-              conversão.
+              Priorize contatos recentes e acompanhe o resultado de cada
+              recuperação.
             </p>
           </div>
 
@@ -322,6 +378,26 @@ export default async function RecuperacaoPage() {
 
                   <div>
                     <p className="text-xs font-medium text-slate-400">
+                      Recuperação
+                    </p>
+
+                    <span
+                      className={`mt-1 inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${getStatusRecuperacaoClass(
+                        venda.status_recuperacao
+                      )}`}
+                    >
+                      {formatStatusRecuperacao(venda.status_recuperacao)}
+                    </span>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatDataStatusRecuperacao(
+                        venda.recuperacao_atualizada_em
+                      )}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">
                       Último contato
                     </p>
                     <p className="mt-1 font-medium text-slate-800">
@@ -359,12 +435,13 @@ export default async function RecuperacaoPage() {
         </div>
 
         <div className="hidden overflow-x-auto lg:block">
-          <table className="w-full min-w-[1050px] text-left text-sm">
+          <table className="w-full min-w-[1180px] text-left text-sm">
             <thead className="border-b border-slate-100 bg-slate-50 text-slate-500">
               <tr>
-                <th className="w-[260px] px-5 py-4 font-medium">Cliente</th>
-                <th className="w-[260px] px-5 py-4 font-medium">Produto</th>
-                <th className="px-5 py-4 font-medium">Status</th>
+                <th className="w-[240px] px-5 py-4 font-medium">Cliente</th>
+                <th className="w-[230px] px-5 py-4 font-medium">Produto</th>
+                <th className="px-5 py-4 font-medium">Pedido</th>
+                <th className="px-5 py-4 font-medium">Recuperação</th>
                 <th className="px-5 py-4 font-medium">Valor</th>
                 <th className="px-5 py-4 font-medium">Contato</th>
                 <th className="px-5 py-4 font-medium">Ações</th>
@@ -378,7 +455,7 @@ export default async function RecuperacaoPage() {
                 return (
                   <tr key={venda.pedido_id} className="hover:bg-slate-50">
                     <td className="px-5 py-4 align-top">
-                      <div className="max-w-[240px]">
+                      <div className="max-w-[220px]">
                         <p className="truncate font-semibold text-slate-950">
                           {venda.cliente_nome || "Cliente sem nome"}
                         </p>
@@ -394,7 +471,7 @@ export default async function RecuperacaoPage() {
                     </td>
 
                     <td className="px-5 py-4 align-top">
-                      <div className="max-w-[240px]">
+                      <div className="max-w-[220px]">
                         <p className="font-medium text-slate-800">
                           {venda.produto_nome || "Produto não informado"}
                         </p>
@@ -423,6 +500,22 @@ export default async function RecuperacaoPage() {
                       </p>
                     </td>
 
+                    <td className="px-5 py-4 align-top">
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${getStatusRecuperacaoClass(
+                          venda.status_recuperacao
+                        )}`}
+                      >
+                        {formatStatusRecuperacao(venda.status_recuperacao)}
+                      </span>
+
+                      <p className="mt-2 text-xs text-slate-500">
+                        {formatDataStatusRecuperacao(
+                          venda.recuperacao_atualizada_em
+                        )}
+                      </p>
+                    </td>
+
                     <td className="px-5 py-4 align-top font-semibold text-slate-950">
                       {formatCurrency(venda.valor)}
                     </td>
@@ -444,7 +537,7 @@ export default async function RecuperacaoPage() {
                     </td>
 
                     <td className="px-5 py-4 align-top">
-                      <div className="min-w-[210px]">
+                      <div className="min-w-[240px]">
                         <RecoveryActions
                           empresaId={venda.empresa_id}
                           clienteId={venda.cliente_id}
@@ -463,7 +556,7 @@ export default async function RecuperacaoPage() {
               {vendas.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-5 py-12 text-center text-slate-500"
                   >
                     Nenhuma venda pendente encontrada.
