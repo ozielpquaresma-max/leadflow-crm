@@ -64,7 +64,7 @@ function formatDataContato(data: string | null) {
 }
 
 function formatResultado(resultado: string | null) {
-  if (!resultado) return "Nenhum";
+  if (!resultado) return "Nenhum contato";
 
   const labels: Record<string, string> = {
     whatsapp_aberto: "WhatsApp aberto",
@@ -77,6 +77,36 @@ function formatResultado(resultado: string | null) {
   };
 
   return labels[resultado] || resultado;
+}
+
+function formatPagamento(pagamento: string | null) {
+  if (!pagamento) return "Não informado";
+
+  const labels: Record<string, string> = {
+    pix: "PIX",
+    boleto: "Boleto",
+    cartao: "Cartão",
+    credit_card: "Cartão",
+    creditcard: "Cartão",
+  };
+
+  return labels[pagamento] || pagamento;
+}
+
+function getStatusClass(status: string | null) {
+  if (status === "pix_pendente") {
+    return "bg-amber-50 text-amber-700 ring-amber-100";
+  }
+
+  if (status === "checkout_abandonado") {
+    return "bg-blue-50 text-blue-700 ring-blue-100";
+  }
+
+  if (status === "cartao_recusado") {
+    return "bg-red-50 text-red-700 ring-red-100";
+  }
+
+  return "bg-slate-50 text-slate-700 ring-slate-100";
 }
 
 function getWhatsAppMessage(venda: RecuperacaoVenda) {
@@ -95,6 +125,11 @@ function getWhatsAppLink(venda: RecuperacaoVenda) {
   const mensagem = getWhatsAppMessage(venda);
 
   return `https://wa.me/55${telefone}?text=${encodeURIComponent(mensagem)}`;
+}
+
+function getTentativas(total: number | null) {
+  const quantidade = total || 0;
+  return `${quantidade} tentativa${quantidade === 1 ? "" : "s"}`;
 }
 
 export default async function RecuperacaoPage() {
@@ -122,81 +157,215 @@ export default async function RecuperacaoPage() {
     (venda) => venda.status === "cartao_recusado"
   ).length;
 
+  const cards = [
+    {
+      label: "Valor em aberto",
+      value: formatCurrency(totalPendente),
+      helper: "Total disponível para recuperação",
+    },
+    {
+      label: "PIX pendente",
+      value: pixPendentes,
+      helper: "Pedidos aguardando pagamento",
+    },
+    {
+      label: "Checkout abandonado",
+      value: checkoutAbandonado,
+      helper: "Clientes que não concluíram",
+    },
+    {
+      label: "Cartão recusado",
+      value: cartaoRecusado,
+      helper: "Falhas no pagamento",
+    },
+  ];
+
   return (
-    <div className="space-y-8">
-      <div>
-        <p className="text-sm font-medium text-blue-600">
-          Recuperação de Vendas
-        </p>
+    <div className="h-[calc(100vh-73px)] space-y-6 overflow-y-auto px-0 pb-10 pr-2">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-blue-600">
+            Recuperação de Vendas
+          </p>
 
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
-          Vendas pendentes
-        </h1>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">
+            Vendas pendentes
+          </h1>
 
-        <p className="mt-2 max-w-2xl text-slate-600">
-          Acompanhe PIX pendentes, checkouts abandonados e pagamentos recusados
-          para recuperar vendas em tempo real.
-        </p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 md:text-base">
+            Acompanhe PIX pendentes, checkouts abandonados e pagamentos
+            recusados para recuperar vendas em tempo real.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+          <span className="font-semibold text-slate-950">{vendas.length}</span>{" "}
+          oportunidade{vendas.length === 1 ? "" : "s"} em aberto
+        </div>
       </div>
 
       {error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
           Erro ao carregar dados do Supabase: {error.message}
         </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Valor em aberto</p>
-          <p className="mt-2 text-2xl font-bold text-slate-950">
-            {formatCurrency(totalPendente)}
-          </p>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => (
+          <div
+            key={card.label}
+            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <p className="text-sm font-medium text-slate-500">{card.label}</p>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">PIX pendente</p>
-          <p className="mt-2 text-2xl font-bold text-slate-950">
-            {pixPendentes}
-          </p>
-        </div>
+            <p className="mt-2 text-2xl font-bold text-slate-950">
+              {card.value}
+            </p>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Checkout abandonado</p>
-          <p className="mt-2 text-2xl font-bold text-slate-950">
-            {checkoutAbandonado}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Cartão recusado</p>
-          <p className="mt-2 text-2xl font-bold text-slate-950">
-            {cartaoRecusado}
-          </p>
-        </div>
+            <p className="mt-1 text-xs text-slate-500">{card.helper}</p>
+          </div>
+        ))}
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 p-5">
-          <h2 className="text-lg font-semibold text-slate-950">
-            Lista de oportunidades de recuperação
-          </h2>
+        <div className="flex flex-col gap-2 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">
+              Oportunidades de recuperação
+            </h2>
 
-          <p className="mt-1 text-sm text-slate-500">
-            Priorize contatos recentes e pedidos com maior chance de conversão.
+            <p className="mt-1 text-sm text-slate-500">
+              Priorize contatos recentes e pedidos com maior chance de
+              conversão.
+            </p>
+          </div>
+
+          <p className="text-xs font-medium text-slate-400">
+            Role para o lado caso a tabela não caiba na tela.
           </p>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1200px] text-left text-sm">
+        <div className="block space-y-4 p-4 lg:hidden">
+          {vendas.map((venda) => {
+            const whatsappMessage = getWhatsAppMessage(venda);
+
+            return (
+              <div
+                key={venda.pedido_id}
+                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-950">
+                      {venda.cliente_nome || "Cliente sem nome"}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {venda.cliente_email || "E-mail não informado"}
+                    </p>
+
+                    <p className="text-xs text-slate-500">
+                      {venda.cliente_telefone || "Telefone não informado"}
+                    </p>
+                  </div>
+
+                  <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${getStatusClass(
+                      venda.status
+                    )}`}
+                  >
+                    {venda.status_label || "Pendente"}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">
+                      Produto
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">
+                      {venda.produto_nome || "Produto não informado"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">
+                      Plataforma
+                    </p>
+                    <p className="mt-1 text-slate-700">
+                      {venda.plataforma_nome || "Não informado"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">
+                      Pagamento
+                    </p>
+                    <p className="mt-1 text-slate-700">
+                      {formatPagamento(venda.metodo_pagamento)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">Tempo</p>
+                    <p className="mt-1 text-slate-700">
+                      {formatTempo(venda.minutos_desde_criacao)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">Valor</p>
+                    <p className="mt-1 font-semibold text-slate-950">
+                      {formatCurrency(venda.valor)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">
+                      Último contato
+                    </p>
+                    <p className="mt-1 font-medium text-slate-800">
+                      {formatResultado(venda.ultima_interacao_resultado)}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {formatDataContato(venda.ultima_interacao_em)}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {getTentativas(venda.total_interacoes)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <RecoveryActions
+                    empresaId={venda.empresa_id}
+                    clienteId={venda.cliente_id}
+                    pedidoId={venda.pedido_id}
+                    whatsappUrl={getWhatsAppLink(venda)}
+                    whatsappMessage={whatsappMessage}
+                    checkoutUrl={venda.checkout_url}
+                    pixCode={venda.pix_copia_cola}
+                  />
+                </div>
+              </div>
+            );
+          })}
+
+          {vendas.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500">
+              Nenhuma venda pendente encontrada.
+            </div>
+          ) : null}
+        </div>
+
+        <div className="hidden overflow-x-auto lg:block">
+          <table className="w-full min-w-[1050px] text-left text-sm">
             <thead className="border-b border-slate-100 bg-slate-50 text-slate-500">
               <tr>
-                <th className="px-5 py-4 font-medium">Cliente</th>
-                <th className="px-5 py-4 font-medium">Produto</th>
-                <th className="px-5 py-4 font-medium">Plataforma</th>
+                <th className="w-[260px] px-5 py-4 font-medium">Cliente</th>
+                <th className="w-[260px] px-5 py-4 font-medium">Produto</th>
                 <th className="px-5 py-4 font-medium">Status</th>
-                <th className="px-5 py-4 font-medium">Pagamento</th>
                 <th className="px-5 py-4 font-medium">Valor</th>
-                <th className="px-5 py-4 font-medium">Tempo</th>
                 <th className="px-5 py-4 font-medium">Contato</th>
                 <th className="px-5 py-4 font-medium">Ações</th>
               </tr>
@@ -208,50 +377,58 @@ export default async function RecuperacaoPage() {
 
                 return (
                   <tr key={venda.pedido_id} className="hover:bg-slate-50">
-                    <td className="px-5 py-4">
-                      <div>
-                        <p className="font-semibold text-slate-950">
-                          {venda.cliente_nome}
+                    <td className="px-5 py-4 align-top">
+                      <div className="max-w-[240px]">
+                        <p className="truncate font-semibold text-slate-950">
+                          {venda.cliente_nome || "Cliente sem nome"}
+                        </p>
+
+                        <p className="truncate text-xs text-slate-500">
+                          {venda.cliente_email || "E-mail não informado"}
                         </p>
 
                         <p className="text-xs text-slate-500">
-                          {venda.cliente_email}
-                        </p>
-
-                        <p className="text-xs text-slate-500">
-                          {venda.cliente_telefone}
+                          {venda.cliente_telefone || "Telefone não informado"}
                         </p>
                       </div>
                     </td>
 
-                    <td className="px-5 py-4 text-slate-700">
-                      {venda.produto_nome}
+                    <td className="px-5 py-4 align-top">
+                      <div className="max-w-[240px]">
+                        <p className="font-medium text-slate-800">
+                          {venda.produto_nome || "Produto não informado"}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          {venda.plataforma_nome || "Plataforma não informada"}
+                        </p>
+                      </div>
                     </td>
 
-                    <td className="px-5 py-4 text-slate-700">
-                      {venda.plataforma_nome}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
-                        {venda.status_label}
+                    <td className="px-5 py-4 align-top">
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${getStatusClass(
+                          venda.status
+                        )}`}
+                      >
+                        {venda.status_label || "Pendente"}
                       </span>
+
+                      <p className="mt-2 text-xs text-slate-500">
+                        {formatPagamento(venda.metodo_pagamento)}
+                      </p>
+
+                      <p className="text-xs text-slate-500">
+                        {formatTempo(venda.minutos_desde_criacao)}
+                      </p>
                     </td>
 
-                    <td className="px-5 py-4 text-slate-700">
-                      {venda.metodo_pagamento}
-                    </td>
-
-                    <td className="px-5 py-4 font-semibold text-slate-950">
+                    <td className="px-5 py-4 align-top font-semibold text-slate-950">
                       {formatCurrency(venda.valor)}
                     </td>
 
-                    <td className="px-5 py-4 text-slate-700">
-                      {formatTempo(venda.minutos_desde_criacao)}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <div>
+                    <td className="px-5 py-4 align-top">
+                      <div className="min-w-[150px]">
                         <p className="font-medium text-slate-950">
                           {formatResultado(venda.ultima_interacao_resultado)}
                         </p>
@@ -261,22 +438,23 @@ export default async function RecuperacaoPage() {
                         </p>
 
                         <p className="text-xs text-slate-500">
-                          {venda.total_interacoes || 0} tentativa
-                          {(venda.total_interacoes || 0) === 1 ? "" : "s"}
+                          {getTentativas(venda.total_interacoes)}
                         </p>
                       </div>
                     </td>
 
-                    <td className="px-5 py-4">
-                      <RecoveryActions
-                        empresaId={venda.empresa_id}
-                        clienteId={venda.cliente_id}
-                        pedidoId={venda.pedido_id}
-                        whatsappUrl={getWhatsAppLink(venda)}
-                        whatsappMessage={whatsappMessage}
-                        checkoutUrl={venda.checkout_url}
-                        pixCode={venda.pix_copia_cola}
-                      />
+                    <td className="px-5 py-4 align-top">
+                      <div className="min-w-[210px]">
+                        <RecoveryActions
+                          empresaId={venda.empresa_id}
+                          clienteId={venda.cliente_id}
+                          pedidoId={venda.pedido_id}
+                          whatsappUrl={getWhatsAppLink(venda)}
+                          whatsappMessage={whatsappMessage}
+                          checkoutUrl={venda.checkout_url}
+                          pixCode={venda.pix_copia_cola}
+                        />
+                      </div>
                     </td>
                   </tr>
                 );
@@ -285,8 +463,8 @@ export default async function RecuperacaoPage() {
               {vendas.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
-                    className="px-5 py-10 text-center text-slate-500"
+                    colSpan={6}
+                    className="px-5 py-12 text-center text-slate-500"
                   >
                     Nenhuma venda pendente encontrada.
                   </td>
