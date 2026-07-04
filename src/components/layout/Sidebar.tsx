@@ -25,6 +25,7 @@ const navItems: NavItem[] = [
   { label: 'Agenda', icon: 'calendar', href: ROUTES.CALENDAR },
   { label: 'Clientes', icon: 'users', href: ROUTES.CONTACTS },
   { label: 'Propostas', icon: 'fileText', href: ROUTES.PROPOSALS },
+  { label: "Recuperação", icon: "dollarSign", href: "/recuperacao" },
   { label: 'Financeiro', icon: 'dollarSign', href: ROUTES.INVOICES },
   { label: 'Configurações', icon: 'settings', href: ROUTES.SETTINGS },
 ]
