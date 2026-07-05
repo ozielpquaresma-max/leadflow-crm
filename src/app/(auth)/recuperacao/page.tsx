@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { RecoveryActions } from "@/features/recoveries/components/RecoveryActions";
 import { supabase } from "@/lib/supabase";
 
@@ -25,6 +26,23 @@ type RecuperacaoVenda = {
   total_interacoes: number | null;
   status_recuperacao: string | null;
   recuperacao_atualizada_em: string | null;
+};
+
+type FiltroRecuperacao =
+  | "todos"
+  | "pix_pendente"
+  | "checkout_abandonado"
+  | "cartao_recusado"
+  | "pendente"
+  | "convertido"
+  | "aguardando_resposta"
+  | "sem_resposta"
+  | "perdido";
+
+type PageProps = {
+  searchParams?: Promise<{
+    filtro?: string;
+  }>;
 };
 
 function formatCurrency(value: number | null) {
@@ -179,7 +197,54 @@ function getTentativas(total: number | null) {
   return `${quantidade} tentativa${quantidade === 1 ? "" : "s"}`;
 }
 
-export default async function RecuperacaoPage() {
+function getStatusRecuperacaoNormalizado(venda: RecuperacaoVenda) {
+  return venda.status_recuperacao || "pendente";
+}
+
+function filtrarVendas(vendas: RecuperacaoVenda[], filtro: FiltroRecuperacao) {
+  if (filtro === "todos") return vendas;
+
+  if (
+    filtro === "pix_pendente" ||
+    filtro === "checkout_abandonado" ||
+    filtro === "cartao_recusado"
+  ) {
+    return vendas.filter((venda) => venda.status === filtro);
+  }
+
+  return vendas.filter(
+    (venda) => getStatusRecuperacaoNormalizado(venda) === filtro
+  );
+}
+
+function getQuantidadeFiltro(
+  vendas: RecuperacaoVenda[],
+  filtro: FiltroRecuperacao
+) {
+  return filtrarVendas(vendas, filtro).length;
+}
+
+function isFiltroValido(filtro: string): filtro is FiltroRecuperacao {
+  return [
+    "todos",
+    "pix_pendente",
+    "checkout_abandonado",
+    "cartao_recusado",
+    "pendente",
+    "convertido",
+    "aguardando_resposta",
+    "sem_resposta",
+    "perdido",
+  ].includes(filtro);
+}
+
+export default async function RecuperacaoPage({ searchParams }: PageProps) {
+  const resolvedSearchParams = await searchParams;
+  const filtroRecebido = resolvedSearchParams?.filtro || "todos";
+  const filtroAtivo: FiltroRecuperacao = isFiltroValido(filtroRecebido)
+    ? filtroRecebido
+    : "todos";
+
   const { data, error } = await supabase
     .from("vw_recuperacao_vendas")
     .select("*")
@@ -187,6 +252,7 @@ export default async function RecuperacaoPage() {
     .order("criado_na_plataforma", { ascending: true });
 
   const vendas = (data || []) as RecuperacaoVenda[];
+  const vendasFiltradas = filtrarVendas(vendas, filtroAtivo);
 
   const totalPendente = vendas.reduce((total, venda) => {
     return total + Number(venda.valor || 0);
@@ -229,6 +295,21 @@ export default async function RecuperacaoPage() {
       value: cartaoRecusado,
       helper: "Falhas no pagamento",
     },
+  ];
+
+  const filtros: {
+    label: string;
+    value: FiltroRecuperacao;
+  }[] = [
+    { label: "Todos", value: "todos" },
+    { label: "PIX", value: "pix_pendente" },
+    { label: "Checkout", value: "checkout_abandonado" },
+    { label: "Cartão", value: "cartao_recusado" },
+    { label: "Pendentes", value: "pendente" },
+    { label: "Convertidos", value: "convertido" },
+    { label: "Aguardando", value: "aguardando_resposta" },
+    { label: "Sem resposta", value: "sem_resposta" },
+    { label: "Perdidos", value: "perdido" },
   ];
 
   return (
@@ -283,6 +364,51 @@ export default async function RecuperacaoPage() {
         ))}
       </div>
 
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-col gap-1">
+          <h2 className="text-sm font-semibold text-slate-950">
+            Filtrar oportunidades
+          </h2>
+          <p className="text-xs text-slate-500">
+            Separe rapidamente por tipo de pedido ou resultado da recuperação.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {filtros.map((filtro) => {
+            const active = filtroAtivo === filtro.value;
+            const quantidade = getQuantidadeFiltro(vendas, filtro.value);
+
+            return (
+              <Link
+                key={filtro.value}
+                href={
+                  filtro.value === "todos"
+                    ? "/recuperacao"
+                    : `/recuperacao?filtro=${filtro.value}`
+                }
+                className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                  active
+                    ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                }`}
+              >
+                {filtro.label}
+                <span
+                  className={`ml-2 rounded-full px-2 py-0.5 text-[10px] ${
+                    active
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {quantidade}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-2 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between">
           <div>
@@ -291,8 +417,15 @@ export default async function RecuperacaoPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Priorize contatos recentes e acompanhe o resultado de cada
-              recuperação.
+              Mostrando{" "}
+              <span className="font-semibold text-slate-700">
+                {vendasFiltradas.length}
+              </span>{" "}
+              de{" "}
+              <span className="font-semibold text-slate-700">
+                {vendas.length}
+              </span>{" "}
+              oportunidade{vendas.length === 1 ? "" : "s"}.
             </p>
           </div>
 
@@ -302,7 +435,7 @@ export default async function RecuperacaoPage() {
         </div>
 
         <div className="block space-y-4 p-4 lg:hidden">
-          {vendas.map((venda) => {
+          {vendasFiltradas.map((venda) => {
             const whatsappMessage = getWhatsAppMessage(venda);
 
             return (
@@ -427,9 +560,9 @@ export default async function RecuperacaoPage() {
             );
           })}
 
-          {vendas.length === 0 ? (
+          {vendasFiltradas.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500">
-              Nenhuma venda pendente encontrada.
+              Nenhuma venda encontrada para este filtro.
             </div>
           ) : null}
         </div>
@@ -449,7 +582,7 @@ export default async function RecuperacaoPage() {
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-              {vendas.map((venda) => {
+              {vendasFiltradas.map((venda) => {
                 const whatsappMessage = getWhatsAppMessage(venda);
 
                 return (
@@ -553,13 +686,13 @@ export default async function RecuperacaoPage() {
                 );
               })}
 
-              {vendas.length === 0 ? (
+              {vendasFiltradas.length === 0 ? (
                 <tr>
                   <td
                     colSpan={7}
                     className="px-5 py-12 text-center text-slate-500"
                   >
-                    Nenhuma venda pendente encontrada.
+                    Nenhuma venda encontrada para este filtro.
                   </td>
                 </tr>
               ) : null}
