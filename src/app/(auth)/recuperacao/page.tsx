@@ -294,10 +294,9 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
     : "todos";
 
   const { data, error } = await supabase
-    .from("vw_recuperacao_vendas")
-    .select("*")
-    .order("prioridade_recuperacao", { ascending: true })
-    .order("criado_na_plataforma", { ascending: true });
+  .from("vw_recuperacao_vendas")
+  .select("*")
+  .order("criado_na_plataforma", { ascending: false });
 
   const vendas = (data || []) as RecuperacaoVenda[];
   const vendasBuscadas = buscarVendas(vendas, busca);
