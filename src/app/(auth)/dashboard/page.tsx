@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type RecuperacaoVenda = {
   pedido_id: string;
   cliente_nome: string | null;
@@ -19,6 +22,7 @@ type RecuperacaoVenda = {
   total_interacoes: number | null;
   status_recuperacao: string | null;
   recuperacao_atualizada_em: string | null;
+  criado_na_plataforma: string | null;
 };
 
 function formatCurrency(value: number | null) {
@@ -150,8 +154,7 @@ export default async function DashboardPage() {
   const { data, error } = await supabase
     .from("vw_recuperacao_vendas")
     .select("*")
-    .order("prioridade_recuperacao", { ascending: true })
-    .order("criado_na_plataforma", { ascending: true });
+    .order("criado_na_plataforma", { ascending: false });
 
   const vendas = (data || []) as RecuperacaoVenda[];
 
@@ -174,7 +177,8 @@ export default async function DashboardPage() {
   ).length;
 
   const pendentes = vendas.filter(
-    (venda) => !venda.status_recuperacao || venda.status_recuperacao === "pendente"
+    (venda) =>
+      !venda.status_recuperacao || venda.status_recuperacao === "pendente"
   ).length;
 
   const convertidos = vendas.filter(
@@ -419,7 +423,8 @@ export default async function DashboardPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Pedidos mais importantes para recuperação no momento.
+              Espelho da página de recuperação, com os pedidos mais recentes no
+              topo.
             </p>
           </div>
 
