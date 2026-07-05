@@ -42,6 +42,7 @@ type FiltroRecuperacao =
 type PageProps = {
   searchParams?: Promise<{
     filtro?: string;
+    q?: string;
   }>;
 };
 
@@ -201,6 +202,35 @@ function getStatusRecuperacaoNormalizado(venda: RecuperacaoVenda) {
   return venda.status_recuperacao || "pendente";
 }
 
+function normalizarTexto(texto: string | null | undefined) {
+  return String(texto || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function buscarVendas(vendas: RecuperacaoVenda[], busca: string) {
+  const termo = normalizarTexto(busca);
+
+  if (!termo) return vendas;
+
+  return vendas.filter((venda) => {
+    const campos = [
+      venda.cliente_nome,
+      venda.cliente_email,
+      venda.cliente_telefone,
+      venda.produto_nome,
+      venda.plataforma_nome,
+      venda.status_label,
+      venda.metodo_pagamento,
+      formatStatusRecuperacao(venda.status_recuperacao),
+    ];
+
+    return campos.some((campo) => normalizarTexto(campo).includes(termo));
+  });
+}
+
 function filtrarVendas(vendas: RecuperacaoVenda[], filtro: FiltroRecuperacao) {
   if (filtro === "todos") return vendas;
 
@@ -238,9 +268,27 @@ function isFiltroValido(filtro: string): filtro is FiltroRecuperacao {
   ].includes(filtro);
 }
 
+function buildRecuperacaoHref(filtro: FiltroRecuperacao, busca: string) {
+  const params = new URLSearchParams();
+
+  if (filtro !== "todos") {
+    params.set("filtro", filtro);
+  }
+
+  if (busca.trim()) {
+    params.set("q", busca.trim());
+  }
+
+  const query = params.toString();
+
+  return query ? `/recuperacao?${query}` : "/recuperacao";
+}
+
 export default async function RecuperacaoPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await searchParams;
   const filtroRecebido = resolvedSearchParams?.filtro || "todos";
+  const busca = resolvedSearchParams?.q || "";
+
   const filtroAtivo: FiltroRecuperacao = isFiltroValido(filtroRecebido)
     ? filtroRecebido
     : "todos";
@@ -252,7 +300,8 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
     .order("criado_na_plataforma", { ascending: true });
 
   const vendas = (data || []) as RecuperacaoVenda[];
-  const vendasFiltradas = filtrarVendas(vendas, filtroAtivo);
+  const vendasBuscadas = buscarVendas(vendas, busca);
+  const vendasFiltradas = filtrarVendas(vendasBuscadas, filtroAtivo);
 
   const totalPendente = vendas.reduce((total, venda) => {
     return total + Number(venda.valor || 0);
@@ -367,6 +416,49 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-col gap-1">
           <h2 className="text-sm font-semibold text-slate-950">
+            Buscar oportunidade
+          </h2>
+          <p className="text-xs text-slate-500">
+            Pesquise por nome, e-mail, telefone, produto ou plataforma.
+          </p>
+        </div>
+
+        <form action="/recuperacao" method="get" className="flex flex-col gap-3 lg:flex-row">
+          {filtroAtivo !== "todos" ? (
+            <input type="hidden" name="filtro" value={filtroAtivo} />
+          ) : null}
+
+          <input
+            type="search"
+            name="q"
+            defaultValue={busca}
+            placeholder="Buscar cliente, e-mail, telefone ou produto..."
+            className="min-h-11 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+          />
+
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="min-h-11 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+            >
+              Buscar
+            </button>
+
+            {busca ? (
+              <Link
+                href={buildRecuperacaoHref(filtroAtivo, "")}
+                className="flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                Limpar
+              </Link>
+            ) : null}
+          </div>
+        </form>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-col gap-1">
+          <h2 className="text-sm font-semibold text-slate-950">
             Filtrar oportunidades
           </h2>
           <p className="text-xs text-slate-500">
@@ -377,16 +469,12 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
         <div className="flex flex-wrap gap-2">
           {filtros.map((filtro) => {
             const active = filtroAtivo === filtro.value;
-            const quantidade = getQuantidadeFiltro(vendas, filtro.value);
+            const quantidade = getQuantidadeFiltro(vendasBuscadas, filtro.value);
 
             return (
               <Link
                 key={filtro.value}
-                href={
-                  filtro.value === "todos"
-                    ? "/recuperacao"
-                    : `/recuperacao?filtro=${filtro.value}`
-                }
+                href={buildRecuperacaoHref(filtro.value, busca)}
                 className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${
                   active
                     ? "border-blue-600 bg-blue-600 text-white shadow-sm"
@@ -426,6 +514,13 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                 {vendas.length}
               </span>{" "}
               oportunidade{vendas.length === 1 ? "" : "s"}.
+              {busca ? (
+                <span>
+                  {" "}
+                  Busca aplicada:{" "}
+                  <span className="font-semibold text-slate-700">“{busca}”</span>.
+                </span>
+              ) : null}
             </p>
           </div>
 
@@ -562,7 +657,7 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
 
           {vendasFiltradas.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500">
-              Nenhuma venda encontrada para este filtro.
+              Nenhuma venda encontrada para este filtro ou busca.
             </div>
           ) : null}
         </div>
@@ -692,7 +787,7 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                     colSpan={7}
                     className="px-5 py-12 text-center text-slate-500"
                   >
-                    Nenhuma venda encontrada para este filtro.
+                    Nenhuma venda encontrada para este filtro ou busca.
                   </td>
                 </tr>
               ) : null}
