@@ -41,6 +41,19 @@ function normalizeStatus(payload: KiwifyPayload) {
       "order.status",
       "data.status",
       "event.status",
+      "payment.status",
+      "transaction.status",
+    ]) || ""
+  ).toLowerCase();
+
+  const eventName = String(
+    getNestedValue(payload, [
+      "event",
+      "event_type",
+      "type",
+      "webhook_event",
+      "trigger",
+      "data.event",
     ]) || ""
   ).toLowerCase();
 
@@ -50,7 +63,10 @@ function normalizeStatus(payload: KiwifyPayload) {
     rawStatus.includes("paid") ||
     rawStatus.includes("approved") ||
     rawStatus.includes("aprovado") ||
-    rawStatus.includes("pago")
+    rawStatus.includes("pago") ||
+    eventName.includes("compra_aprovada") ||
+    eventName.includes("order.paid") ||
+    eventName.includes("approved")
   ) {
     return "pago";
   }
@@ -59,7 +75,9 @@ function normalizeStatus(payload: KiwifyPayload) {
     rawStatus.includes("refused") ||
     rawStatus.includes("recused") ||
     rawStatus.includes("declined") ||
-    rawStatus.includes("cartao_recusado")
+    rawStatus.includes("cartao_recusado") ||
+    eventName.includes("compra_recusada") ||
+    eventName.includes("refused")
   ) {
     return "cartao_recusado";
   }
@@ -67,7 +85,10 @@ function normalizeStatus(payload: KiwifyPayload) {
   if (
     rawStatus.includes("abandoned") ||
     rawStatus.includes("abandonado") ||
-    rawStatus.includes("checkout_abandonado")
+    rawStatus.includes("checkout_abandonado") ||
+    eventName.includes("carrinho_abandonado") ||
+    eventName.includes("cart_abandoned") ||
+    eventName.includes("abandoned")
   ) {
     return "checkout_abandonado";
   }
@@ -77,7 +98,9 @@ function normalizeStatus(payload: KiwifyPayload) {
     (rawStatus.includes("pending") ||
       rawStatus.includes("pendente") ||
       rawStatus.includes("waiting") ||
-      rawStatus.includes("aguardando"))
+      rawStatus.includes("aguardando") ||
+      eventName.includes("pix_gerado") ||
+      eventName.includes("pix"))
   ) {
     return "pix_pendente";
   }
@@ -104,12 +127,25 @@ function normalizePaymentMethod(payload: KiwifyPayload) {
       "sale.payment_method",
       "order.payment_method",
       "data.payment_method",
+      "payment_method_name",
+      "transaction.payment_method",
     ]) || ""
   ).toLowerCase();
 
-  if (rawMethod.includes("pix")) return "pix";
+  const eventName = String(
+    getNestedValue(payload, [
+      "event",
+      "event_type",
+      "type",
+      "webhook_event",
+      "trigger",
+      "data.event",
+    ]) || ""
+  ).toLowerCase();
+
+  if (rawMethod.includes("pix") || eventName.includes("pix")) return "pix";
   if (rawMethod.includes("card") || rawMethod.includes("cartao")) return "cartao";
-  if (rawMethod.includes("boleto")) return "boleto";
+  if (rawMethod.includes("boleto") || eventName.includes("boleto")) return "boleto";
 
   return rawMethod || "desconhecido";
 }
@@ -118,7 +154,12 @@ function toNumber(value: unknown) {
   if (typeof value === "number") return value;
 
   if (typeof value === "string") {
-    const normalized = value.replace("R$", "").replace(".", "").replace(",", ".").trim();
+    const normalized = value
+      .replace("R$", "")
+      .replace(".", "")
+      .replace(",", ".")
+      .trim();
+
     const parsed = Number(normalized);
 
     if (!Number.isNaN(parsed)) return parsed;
@@ -136,6 +177,35 @@ function slugify(value: string) {
     .replace(/(^-|-$)/g, "");
 }
 
+function cleanToken(value: unknown) {
+  if (!value) return null;
+
+  return String(value)
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+}
+
+function getReceivedSecrets(request: NextRequest, payload: KiwifyPayload) {
+  return [
+    request.headers.get("x-webhook-secret"),
+    request.headers.get("x-kiwify-token"),
+    request.headers.get("kiwify-token"),
+    request.headers.get("x-token"),
+    request.headers.get("token"),
+    request.headers.get("authorization"),
+    getNestedValue(payload, [
+      "token",
+      "webhook_token",
+      "kiwify_token",
+      "data.token",
+      "webhook.token",
+      "event.token",
+    ]),
+  ]
+    .map(cleanToken)
+    .filter(Boolean);
+}
+
 export async function POST(request: NextRequest) {
   try {
     if (!kiwifyWebhookSecret) {
@@ -145,16 +215,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const receivedSecret = request.headers.get("x-webhook-secret");
+    const payload = (await request.json()) as KiwifyPayload;
 
-    if (receivedSecret !== kiwifyWebhookSecret) {
+    const receivedSecrets = getReceivedSecrets(request, payload);
+    const authorized = receivedSecrets.some(
+      (secret) => secret === kiwifyWebhookSecret
+    );
+
+    if (!authorized) {
       return NextResponse.json(
         { ok: false, error: "Webhook não autorizado." },
         { status: 401 }
       );
     }
-
-    const payload = (await request.json()) as KiwifyPayload;
 
     const { data: empresa } = await supabase
       .from("empresas")
@@ -176,16 +249,30 @@ export async function POST(request: NextRequest) {
     }
 
     const eventName =
-      getNestedValue(payload, ["event", "event_type", "type", "webhook_event"]) ||
-      "kiwify_event";
+      getNestedValue(payload, [
+        "event",
+        "event_type",
+        "type",
+        "webhook_event",
+        "trigger",
+        "data.event",
+      ]) || "kiwify_event";
 
-    await supabase.from("webhooks").insert({
-      empresa_id: empresa.id,
-      plataforma_id: plataforma.id,
-      evento: String(eventName),
-      payload,
-      processado: false,
-    });
+    const { data: webhookLog, error: webhookError } = await supabase
+      .from("webhooks")
+      .insert({
+        empresa_id: empresa.id,
+        plataforma_id: plataforma.id,
+        evento: String(eventName),
+        payload,
+        processado: false,
+      })
+      .select("id")
+      .single();
+
+    if (webhookError) {
+      throw webhookError;
+    }
 
     const customerName =
       getNestedValue(payload, [
@@ -195,6 +282,8 @@ export async function POST(request: NextRequest) {
         "client.name",
         "data.customer.name",
         "data.buyer.name",
+        "customer.fullName",
+        "buyer.fullName",
         "name",
       ]) || "Cliente Kiwify";
 
@@ -276,6 +365,8 @@ export async function POST(request: NextRequest) {
         "data.product.name",
         "sale.product.name",
         "order.product.name",
+        "product_name",
+        "productName",
       ]) || "Produto Kiwify";
 
     const productSlug = slugify(String(productName));
@@ -291,6 +382,7 @@ export async function POST(request: NextRequest) {
         "order.amount",
         "data.amount",
         "data.total",
+        "transaction.amount",
       ])
     );
 
@@ -302,6 +394,7 @@ export async function POST(request: NextRequest) {
         "sale.checkout_url",
         "data.checkout_url",
         "payment.checkout_url",
+        "checkoutUrl",
       ]) || null;
 
     const { data: existingProduct } = await supabase
@@ -345,6 +438,8 @@ export async function POST(request: NextRequest) {
         "sale.id",
         "data.id",
         "data.order_id",
+        "transaction.id",
+        "order.code",
       ]) || `kiwify-${Date.now()}`
     );
 
@@ -360,6 +455,7 @@ export async function POST(request: NextRequest) {
         "payment.pix.qr_code",
         "data.pix.code",
         "data.pix.qr_code",
+        "pix_code",
       ]) || null;
 
     const pixQrCodeUrl =
@@ -368,6 +464,7 @@ export async function POST(request: NextRequest) {
         "pix.qr_code_url",
         "payment.pix.qrcode_url",
         "data.pix.qrcode_url",
+        "pix_qrcode_url",
       ]) || null;
 
     const createdAt =
@@ -376,6 +473,7 @@ export async function POST(request: NextRequest) {
         "order.created_at",
         "sale.created_at",
         "data.created_at",
+        "transaction.created_at",
       ]) || new Date().toISOString();
 
     const paidAt =
@@ -386,6 +484,7 @@ export async function POST(request: NextRequest) {
             "order.paid_at",
             "sale.paid_at",
             "data.paid_at",
+            "transaction.paid_at",
           ]) || new Date().toISOString()
         : null;
 
@@ -397,7 +496,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (existingOrder?.id) {
-      await supabase
+      const { error: updateOrderError } = await supabase
         .from("pedidos")
         .update({
           cliente_id: clienteId,
@@ -413,6 +512,10 @@ export async function POST(request: NextRequest) {
           pago_em: paidAt,
         })
         .eq("id", existingOrder.id);
+
+      if (updateOrderError) {
+        throw updateOrderError;
+      }
     } else {
       const { error: orderError } = await supabase.from("pedidos").insert({
         empresa_id: empresa.id,
@@ -438,11 +541,7 @@ export async function POST(request: NextRequest) {
     await supabase
       .from("webhooks")
       .update({ processado: true })
-      .eq("empresa_id", empresa.id)
-      .eq("plataforma_id", plataforma.id)
-      .eq("evento", String(eventName))
-      .order("created_at", { ascending: false })
-      .limit(1);
+      .eq("id", webhookLog.id);
 
     return NextResponse.json({
       ok: true,
