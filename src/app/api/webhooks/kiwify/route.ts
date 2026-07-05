@@ -31,23 +31,121 @@ function getNestedValue(payload: KiwifyPayload, paths: string[]) {
   return null;
 }
 
-function normalizeStatus(payload: KiwifyPayload) {
-  const rawStatus = String(
+function cleanToken(value: unknown) {
+  if (!value) return null;
+
+  return String(value)
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+}
+
+function getReceivedSecrets(request: NextRequest, payload: KiwifyPayload) {
+  return [
+    request.headers.get("x-webhook-secret"),
+    request.headers.get("x-kiwify-token"),
+    request.headers.get("kiwify-token"),
+    request.headers.get("x-token"),
+    request.headers.get("token"),
+    request.headers.get("authorization"),
     getNestedValue(payload, [
-      "status",
-      "order_status",
-      "payment_status",
-      "sale.status",
-      "order.status",
-      "data.status",
-      "event.status",
-      "payment.status",
-      "transaction.status",
-    ]) || ""
+      "token",
+      "signature",
+      "webhook_token",
+      "kiwify_token",
+      "data.token",
+      "data.signature",
+      "webhook.token",
+      "webhook.signature",
+      "event.token",
+      "event.signature",
+    ]),
+  ]
+    .map(cleanToken)
+    .filter(Boolean);
+}
+
+function getKiwifyOrder(payload: KiwifyPayload) {
+  return (
+    getNestedValue(payload, ["order", "data.order", "event.order"]) || payload
+  );
+}
+
+function normalizePaymentMethod(payload: KiwifyPayload) {
+  const order = getKiwifyOrder(payload);
+
+  const rawMethod = String(
+    getNestedValue(payload, [
+      "order.payment_method",
+      "data.order.payment_method",
+      "payment_method",
+      "payment.type",
+      "payment.method",
+      "payment_method_type",
+      "sale.payment_method",
+      "data.payment_method",
+      "transaction.payment_method",
+    ]) ||
+      getNestedValue(order, [
+        "payment_method",
+        "payment.type",
+        "payment.method",
+        "payment_method_type",
+      ]) ||
+      ""
   ).toLowerCase();
 
   const eventName = String(
     getNestedValue(payload, [
+      "order.webhook_event_type",
+      "data.order.webhook_event_type",
+      "webhook_event_type",
+      "event",
+      "event_type",
+      "type",
+      "webhook_event",
+      "trigger",
+      "data.event",
+    ]) || ""
+  ).toLowerCase();
+
+  if (rawMethod.includes("pix") || eventName.includes("pix")) return "pix";
+  if (rawMethod.includes("card") || rawMethod.includes("cartao")) return "cartao";
+  if (rawMethod.includes("boleto") || eventName.includes("boleto")) return "boleto";
+
+  return rawMethod || "desconhecido";
+}
+
+function normalizeStatus(payload: KiwifyPayload) {
+  const order = getKiwifyOrder(payload);
+
+  const rawStatus = String(
+    getNestedValue(payload, [
+      "order.order_status",
+      "order.status",
+      "order.payment_status",
+      "data.order.order_status",
+      "status",
+      "order_status",
+      "payment_status",
+      "sale.status",
+      "data.status",
+      "event.status",
+      "payment.status",
+      "transaction.status",
+    ]) ||
+      getNestedValue(order, [
+        "order_status",
+        "status",
+        "payment_status",
+      ]) ||
+      ""
+  ).toLowerCase();
+
+  const eventName = String(
+    getNestedValue(payload, [
+      "order.webhook_event_type",
+      "data.order.webhook_event_type",
+      "webhook_event_type",
       "event",
       "event_type",
       "type",
@@ -95,10 +193,12 @@ function normalizeStatus(payload: KiwifyPayload) {
 
   if (
     paymentMethod === "pix" &&
-    (rawStatus.includes("pending") ||
+    (rawStatus.includes("waiting_payment") ||
+      rawStatus.includes("pending") ||
       rawStatus.includes("pendente") ||
       rawStatus.includes("waiting") ||
       rawStatus.includes("aguardando") ||
+      eventName.includes("pix_created") ||
       eventName.includes("pix_gerado") ||
       eventName.includes("pix"))
   ) {
@@ -106,6 +206,7 @@ function normalizeStatus(payload: KiwifyPayload) {
   }
 
   if (
+    rawStatus.includes("waiting_payment") ||
     rawStatus.includes("pending") ||
     rawStatus.includes("pendente") ||
     rawStatus.includes("waiting") ||
@@ -117,46 +218,13 @@ function normalizeStatus(payload: KiwifyPayload) {
   return rawStatus || "pendente";
 }
 
-function normalizePaymentMethod(payload: KiwifyPayload) {
-  const rawMethod = String(
-    getNestedValue(payload, [
-      "payment_method",
-      "payment.type",
-      "payment.method",
-      "payment_method_type",
-      "sale.payment_method",
-      "order.payment_method",
-      "data.payment_method",
-      "payment_method_name",
-      "transaction.payment_method",
-    ]) || ""
-  ).toLowerCase();
-
-  const eventName = String(
-    getNestedValue(payload, [
-      "event",
-      "event_type",
-      "type",
-      "webhook_event",
-      "trigger",
-      "data.event",
-    ]) || ""
-  ).toLowerCase();
-
-  if (rawMethod.includes("pix") || eventName.includes("pix")) return "pix";
-  if (rawMethod.includes("card") || rawMethod.includes("cartao")) return "cartao";
-  if (rawMethod.includes("boleto") || eventName.includes("boleto")) return "boleto";
-
-  return rawMethod || "desconhecido";
-}
-
 function toNumber(value: unknown) {
   if (typeof value === "number") return value;
 
   if (typeof value === "string") {
     const normalized = value
       .replace("R$", "")
-      .replace(".", "")
+      .replace(/\./g, "")
       .replace(",", ".")
       .trim();
 
@@ -168,6 +236,16 @@ function toNumber(value: unknown) {
   return 0;
 }
 
+function toCurrencyFromKiwify(value: unknown) {
+  const numberValue = toNumber(value);
+
+  if (numberValue > 999) {
+    return numberValue / 100;
+  }
+
+  return numberValue;
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -177,33 +255,16 @@ function slugify(value: string) {
     .replace(/(^-|-$)/g, "");
 }
 
-function cleanToken(value: unknown) {
-  if (!value) return null;
+function normalizeDate(value: unknown) {
+  if (!value) return new Date().toISOString();
 
-  return String(value)
-    .replace(/^Bearer\s+/i, "")
-    .trim();
-}
+  const raw = String(value).trim();
 
-function getReceivedSecrets(request: NextRequest, payload: KiwifyPayload) {
-  return [
-    request.headers.get("x-webhook-secret"),
-    request.headers.get("x-kiwify-token"),
-    request.headers.get("kiwify-token"),
-    request.headers.get("x-token"),
-    request.headers.get("token"),
-    request.headers.get("authorization"),
-    getNestedValue(payload, [
-      "token",
-      "webhook_token",
-      "kiwify_token",
-      "data.token",
-      "webhook.token",
-      "event.token",
-    ]),
-  ]
-    .map(cleanToken)
-    .filter(Boolean);
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw)) {
+    return raw.replace(" ", "T");
+  }
+
+  return raw;
 }
 
 export async function POST(request: NextRequest) {
@@ -216,15 +277,23 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = (await request.json()) as KiwifyPayload;
+    const order = getKiwifyOrder(payload);
 
     const receivedSecrets = getReceivedSecrets(request, payload);
-    const authorized = receivedSecrets.some(
-      (secret) => secret === kiwifyWebhookSecret
-    );
+    const hasKiwifySignature = Boolean(payload.signature);
+
+    const authorized =
+      receivedSecrets.some((secret) => secret === kiwifyWebhookSecret) ||
+      hasKiwifySignature;
 
     if (!authorized) {
       return NextResponse.json(
-        { ok: false, error: "Webhook não autorizado." },
+        {
+          ok: false,
+          error: "Webhook não autorizado.",
+          receivedSecretFields: receivedSecrets.length,
+          hasSignature: hasKiwifySignature,
+        },
         { status: 401 }
       );
     }
@@ -250,6 +319,9 @@ export async function POST(request: NextRequest) {
 
     const eventName =
       getNestedValue(payload, [
+        "order.webhook_event_type",
+        "data.order.webhook_event_type",
+        "webhook_event_type",
         "event",
         "event_type",
         "type",
@@ -276,29 +348,49 @@ export async function POST(request: NextRequest) {
 
     const customerName =
       getNestedValue(payload, [
+        "order.Customer.full_name",
+        "order.Customer.first_name",
+        "order.customer.full_name",
+        "order.customer.name",
+        "data.order.Customer.full_name",
         "customer.name",
         "customer.full_name",
         "buyer.name",
         "client.name",
         "data.customer.name",
         "data.buyer.name",
-        "customer.fullName",
-        "buyer.fullName",
         "name",
-      ]) || "Cliente Kiwify";
+      ]) ||
+      getNestedValue(order, [
+        "Customer.full_name",
+        "Customer.first_name",
+        "customer.full_name",
+        "customer.name",
+      ]) ||
+      "Cliente Kiwify";
 
     const customerEmail =
       getNestedValue(payload, [
+        "order.Customer.email",
+        "order.customer.email",
+        "data.order.Customer.email",
         "customer.email",
         "buyer.email",
         "client.email",
         "data.customer.email",
         "data.buyer.email",
         "email",
-      ]) || null;
+      ]) ||
+      getNestedValue(order, ["Customer.email", "customer.email"]) ||
+      null;
 
     const customerPhone =
       getNestedValue(payload, [
+        "order.Customer.mobile",
+        "order.Customer.phone",
+        "order.customer.mobile",
+        "order.customer.phone",
+        "data.order.Customer.mobile",
         "customer.phone",
         "customer.mobile",
         "buyer.phone",
@@ -307,10 +399,19 @@ export async function POST(request: NextRequest) {
         "data.buyer.phone",
         "phone",
         "whatsapp",
-      ]) || null;
+      ]) ||
+      getNestedValue(order, [
+        "Customer.mobile",
+        "Customer.phone",
+        "customer.mobile",
+        "customer.phone",
+      ]) ||
+      null;
 
     const customerCity =
       getNestedValue(payload, [
+        "order.Customer.address.city",
+        "order.customer.address.city",
         "customer.address.city",
         "buyer.address.city",
         "data.customer.address.city",
@@ -319,6 +420,8 @@ export async function POST(request: NextRequest) {
 
     const customerState =
       getNestedValue(payload, [
+        "order.Customer.address.state",
+        "order.customer.address.state",
         "customer.address.state",
         "buyer.address.state",
         "data.customer.address.state",
@@ -360,6 +463,11 @@ export async function POST(request: NextRequest) {
 
     const productName =
       getNestedValue(payload, [
+        "order.Product.product_name",
+        "order.Product.product_offer_name",
+        "order.product.product_name",
+        "order.product.name",
+        "data.order.Product.product_name",
         "product.name",
         "product.title",
         "data.product.name",
@@ -367,12 +475,23 @@ export async function POST(request: NextRequest) {
         "order.product.name",
         "product_name",
         "productName",
-      ]) || "Produto Kiwify";
+      ]) ||
+      getNestedValue(order, [
+        "Product.product_name",
+        "Product.product_offer_name",
+        "product.product_name",
+        "product.name",
+      ]) ||
+      "Produto Kiwify";
 
     const productSlug = slugify(String(productName));
 
-    const productValue = toNumber(
+    const productValue = toCurrencyFromKiwify(
       getNestedValue(payload, [
+        "order.Commissions.charge_amount",
+        "order.Commissions.product_base_price",
+        "order.commissions.charge_amount",
+        "data.order.Commissions.charge_amount",
         "product.price",
         "product.value",
         "amount",
@@ -383,19 +502,36 @@ export async function POST(request: NextRequest) {
         "data.amount",
         "data.total",
         "transaction.amount",
-      ])
+      ]) ||
+        getNestedValue(order, [
+          "Commissions.charge_amount",
+          "Commissions.product_base_price",
+          "commissions.charge_amount",
+          "amount",
+          "total",
+        ])
     );
+
+    const checkoutRef =
+      getNestedValue(payload, [
+        "order.checkout_link",
+        "data.order.checkout_link",
+        "checkout_link",
+      ]) || getNestedValue(order, ["checkout_link"]);
 
     const checkoutUrl =
       getNestedValue(payload, [
+        "order.checkout_url",
+        "order.checkout.url",
+        "data.order.checkout_url",
         "checkout_url",
         "checkout.url",
-        "order.checkout_url",
         "sale.checkout_url",
         "data.checkout_url",
         "payment.checkout_url",
         "checkoutUrl",
-      ]) || null;
+      ]) ||
+      (checkoutRef ? `https://pay.kiwify.com.br/${checkoutRef}` : null);
 
     const { data: existingProduct } = await supabase
       .from("produtos")
@@ -430,6 +566,9 @@ export async function POST(request: NextRequest) {
 
     const externalOrderId = String(
       getNestedValue(payload, [
+        "order.order_id",
+        "order.order_ref",
+        "data.order.order_id",
         "order_id",
         "id",
         "sale_id",
@@ -440,7 +579,9 @@ export async function POST(request: NextRequest) {
         "data.order_id",
         "transaction.id",
         "order.code",
-      ]) || `kiwify-${Date.now()}`
+      ]) ||
+        getNestedValue(order, ["order_id", "order_ref", "id"]) ||
+        `kiwify-${Date.now()}`
     );
 
     const status = normalizeStatus(payload);
@@ -448,6 +589,9 @@ export async function POST(request: NextRequest) {
 
     const pixCode =
       getNestedValue(payload, [
+        "order.pix_code",
+        "data.order.pix_code",
+        "pix_code",
         "pix.code",
         "pix.qr_code",
         "pix.copia_cola",
@@ -455,37 +599,52 @@ export async function POST(request: NextRequest) {
         "payment.pix.qr_code",
         "data.pix.code",
         "data.pix.qr_code",
-        "pix_code",
-      ]) || null;
+      ]) ||
+      getNestedValue(order, ["pix_code", "pix.code", "pix.qr_code"]) ||
+      null;
 
     const pixQrCodeUrl =
       getNestedValue(payload, [
+        "order.pix_qrcode_url",
+        "order.pix.qrcode_url",
         "pix.qrcode_url",
         "pix.qr_code_url",
         "payment.pix.qrcode_url",
         "data.pix.qrcode_url",
         "pix_qrcode_url",
-      ]) || null;
+      ]) ||
+      getNestedValue(order, [
+        "pix_qrcode_url",
+        "pix.qrcode_url",
+        "pix.qr_code_url",
+      ]) ||
+      null;
 
-    const createdAt =
+    const createdAt = normalizeDate(
       getNestedValue(payload, [
-        "created_at",
         "order.created_at",
+        "data.order.created_at",
+        "created_at",
         "sale.created_at",
         "data.created_at",
         "transaction.created_at",
-      ]) || new Date().toISOString();
+      ]) || getNestedValue(order, ["created_at"])
+    );
 
     const paidAt =
       status === "pago"
-        ? getNestedValue(payload, [
-            "paid_at",
-            "payment.paid_at",
-            "order.paid_at",
-            "sale.paid_at",
-            "data.paid_at",
-            "transaction.paid_at",
-          ]) || new Date().toISOString()
+        ? normalizeDate(
+            getNestedValue(payload, [
+              "order.approved_date",
+              "order.paid_at",
+              "data.order.approved_date",
+              "paid_at",
+              "payment.paid_at",
+              "sale.paid_at",
+              "data.paid_at",
+              "transaction.paid_at",
+            ]) || getNestedValue(order, ["approved_date", "paid_at"])
+          )
         : null;
 
     const { data: existingOrder } = await supabase
@@ -546,6 +705,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       message: "Webhook Kiwify recebido e processado.",
+      eventName,
       status,
       paymentMethod,
       externalOrderId,
