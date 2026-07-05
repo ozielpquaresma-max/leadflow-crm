@@ -627,16 +627,7 @@ export async function POST(request: NextRequest) {
       ]) ||
       null;
 
-    const createdAt = normalizeDate(
-      getNestedValue(payload, [
-        "order.created_at",
-        "data.order.created_at",
-        "created_at",
-        "sale.created_at",
-        "data.created_at",
-        "transaction.created_at",
-      ]) || getNestedValue(order, ["created_at"])
-    );
+    const createdAt = new Date().toISOString();
 
     const paidAt =
       status === "pago"
