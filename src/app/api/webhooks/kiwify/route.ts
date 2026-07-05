@@ -34,13 +34,12 @@ function getNestedValue(payload: KiwifyPayload, paths: string[]) {
 function cleanToken(value: unknown) {
   if (!value) return null;
 
-  return String(value)
-    .replace(/^Bearer\s+/i, "")
-    .trim();
+  return String(value).replace(/^Bearer\s+/i, "").trim();
 }
 
 function getReceivedSecrets(request: NextRequest, payload: KiwifyPayload) {
   return [
+    request.nextUrl.searchParams.get("signature"),
     request.headers.get("x-webhook-secret"),
     request.headers.get("x-kiwify-token"),
     request.headers.get("kiwify-token"),
@@ -109,8 +108,14 @@ function normalizePaymentMethod(payload: KiwifyPayload) {
   ).toLowerCase();
 
   if (rawMethod.includes("pix") || eventName.includes("pix")) return "pix";
-  if (rawMethod.includes("card") || rawMethod.includes("cartao")) return "cartao";
-  if (rawMethod.includes("boleto") || eventName.includes("boleto")) return "boleto";
+
+  if (rawMethod.includes("card") || rawMethod.includes("cartao")) {
+    return "cartao";
+  }
+
+  if (rawMethod.includes("boleto") || eventName.includes("boleto")) {
+    return "boleto";
+  }
 
   return rawMethod || "desconhecido";
 }
@@ -133,11 +138,7 @@ function normalizeStatus(payload: KiwifyPayload) {
       "payment.status",
       "transaction.status",
     ]) ||
-      getNestedValue(order, [
-        "order_status",
-        "status",
-        "payment_status",
-      ]) ||
+      getNestedValue(order, ["order_status", "status", "payment_status"]) ||
       ""
   ).toLowerCase();
 
@@ -280,7 +281,10 @@ export async function POST(request: NextRequest) {
     const order = getKiwifyOrder(payload);
 
     const receivedSecrets = getReceivedSecrets(request, payload);
-    const hasKiwifySignature = Boolean(payload.signature);
+
+    const hasKiwifySignature = Boolean(
+      payload.signature || request.nextUrl.searchParams.get("signature")
+    );
 
     const authorized =
       receivedSecrets.some((secret) => secret === kiwifyWebhookSecret) ||
@@ -530,8 +534,7 @@ export async function POST(request: NextRequest) {
         "data.checkout_url",
         "payment.checkout_url",
         "checkoutUrl",
-      ]) ||
-      (checkoutRef ? `https://pay.kiwify.com.br/${checkoutRef}` : null);
+      ]) || (checkoutRef ? `https://pay.kiwify.com.br/${checkoutRef}` : null);
 
     const { data: existingProduct } = await supabase
       .from("produtos")
