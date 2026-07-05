@@ -1,34 +1,35 @@
 /**
- * @file Dropdown Menu Component
- * Componente para menus dropdown
+ * @file DropdownMenu Component
  */
 
-'use client'
+"use client";
 
-import React, { useState, useRef, useEffect } from 'react'
-import { cn } from '@/lib/utils'
+import React, { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
+
+type DropdownMenuItem = {
+  label: string;
+  icon?: React.ReactNode;
+  onClick?: () => void;
+  divider?: boolean;
+  danger?: boolean;
+};
 
 interface DropdownMenuProps {
-  trigger: React.ReactNode
-  items: Array<{
-    label: string
-    icon?: React.ReactNode
-    onClick: () => void
-    divider?: boolean
-    danger?: boolean
-  }>
-  align?: 'left' | 'right'
-  className?: string
+  trigger: React.ReactNode;
+  items: DropdownMenuItem[];
+  align?: "left" | "right";
+  className?: string;
 }
 
 export function DropdownMenu({
   trigger,
   items,
-  align = 'right',
+  align = "right",
   className,
 }: DropdownMenuProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -36,60 +37,59 @@ export function DropdownMenu({
         menuRef.current &&
         !menuRef.current.contains(event.target as Node)
       ) {
-        setIsOpen(false)
+        setOpen(false);
       }
     }
 
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    document.addEventListener("mousedown", handleClickOutside);
 
-  const handleItemClick = (onClick: () => void) => {
-    onClick()
-    setIsOpen(false)
-  }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   return (
-    <div className={cn('relative inline-block', className)} ref={menuRef}>
-      <div
-        onClick={() => setIsOpen(!isOpen)}
-        className="inline-block cursor-pointer"
+    <div ref={menuRef} className={cn("relative inline-block", className)}>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex items-center"
       >
         {trigger}
-      </div>
+      </button>
 
-      {isOpen && (
+      {open ? (
         <div
           className={cn(
-            'absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg min-w-max py-1 z-50',
-            {
-              'left-0': align === 'left',
-              'right-0': align === 'right',
-            },
+            "absolute top-full z-50 mt-2 min-w-48 rounded-lg border border-gray-200 bg-white py-2 shadow-lg",
+            align === "left" ? "left-0" : "right-0"
           )}
         >
           {items.map((item, index) => (
-            <React.Fragment key={index}>
-              {item.divider && (
-                <div key={`divider-${index}`} className="border-t border-gray-200 my-1" />
-              )}
+            <React.Fragment key={`${item.label}-${index}`}>
+              {item.divider ? <div className="my-2 border-t border-gray-100" /> : null}
+
               <button
-                onClick={() => handleItemClick(item.onClick)}
+                type="button"
+                onClick={() => {
+                  item.onClick?.();
+                  setOpen(false);
+                }}
                 className={cn(
-                  'w-full px-4 py-2 text-left text-sm flex items-center gap-2 transition-colors',
-                  {
-                    'text-gray-700 hover:bg-gray-100': !item.danger,
-                    'text-red-600 hover:bg-red-50': item.danger,
-                  },
+                  "flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition hover:bg-gray-50",
+                  item.danger ? "text-red-600" : "text-gray-700"
                 )}
               >
-                {item.icon && <span className="w-4 h-4">{item.icon}</span>}
-                {item.label}
+                {item.icon ? (
+                  <span className="flex-shrink-0">{item.icon}</span>
+                ) : null}
+
+                <span>{item.label}</span>
               </button>
             </React.Fragment>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
-  )
+  );
 }

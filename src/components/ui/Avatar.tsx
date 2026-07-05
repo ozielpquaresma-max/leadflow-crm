@@ -1,73 +1,78 @@
 /**
  * @file Avatar Component
- * Componente para avatares de usuários
  */
 
-import React from 'react'
-import { cn } from '@/lib/utils'
+import React from "react";
+import { cn } from "@/lib/utils";
 
-interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
-  src?: string
-  alt?: string
-  name?: string
-  size?: 'sm' | 'md' | 'lg'
-  status?: 'online' | 'away' | 'offline'
+type AvatarSize = "sm" | "md" | "lg";
+type AvatarStatus = "online" | "away" | "offline";
+
+interface AvatarProps {
+  name?: string;
+  src?: string;
+  size?: AvatarSize;
+  status?: AvatarStatus;
+  className?: string;
+}
+
+const sizeClasses: Record<AvatarSize, string> = {
+  sm: "h-8 w-8 text-xs",
+  md: "h-10 w-10 text-sm",
+  lg: "h-12 w-12 text-base",
+};
+
+const statusClasses: Record<AvatarStatus, string> = {
+  online: "bg-green-500",
+  away: "bg-yellow-500",
+  offline: "bg-gray-400",
+};
+
+function getInitials(name?: string) {
+  if (!name) return "U";
+
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }
 
 export function Avatar({
+  name = "Usuário",
   src,
-  alt,
-  name,
-  size = 'md',
+  size = "md",
   status,
   className,
-  ...props
 }: AvatarProps) {
-  const initials = name
-    ?.split(' ')
-    .map((word) => word[0])
-    .join('')
-    .toUpperCase()
-
-  const sizeClasses = {
-    sm: 'w-8 h-8 text-xs',
-    md: 'w-10 h-10 text-sm',
-    lg: 'w-12 h-12 text-base',
-  }
-
   return (
-    <div className={cn('relative', className)} {...props}>
-      {src ? (
-        <img
-          src={src}
-          alt={alt || name}
+    <div className={cn("relative inline-flex shrink-0", className)}>
+      <div
+        className={cn(
+          "flex items-center justify-center overflow-hidden rounded-full bg-blue-600 font-bold text-white",
+          sizeClasses[size]
+        )}
+      >
+        {src ? (
+          <img
+            src={src}
+            alt={name}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <span>{getInitials(name)}</span>
+        )}
+      </div>
+
+      {status ? (
+        <span
           className={cn(
-            'rounded-full object-cover',
-            sizeClasses[size],
+            "absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white",
+            statusClasses[status]
           )}
         />
-      ) : (
-        <div
-          className={cn(
-            'rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold',
-            sizeClasses[size],
-          )}
-        >
-          {initials || '?'}
-        </div>
-      )}
-      {status && (
-        <div
-          className={cn(
-            'absolute bottom-0 right-0 rounded-full border-2 border-white',
-            {
-              'bg-green-500 w-3 h-3': status === 'online',
-              'bg-yellow-500 w-3 h-3': status === 'away',
-              'bg-gray-400 w-3 h-3': status === 'offline',
-            },
-          )}
-        />
-      )}
+      ) : null}
     </div>
-  )
+  );
 }

@@ -1,78 +1,70 @@
 /**
  * @file Card Component
- * Componente base para cards
  */
 
-import React from 'react'
-import { cn } from '@/lib/utils'
+import React from "react";
+import { cn } from "@/lib/utils";
+
+type CardVariant = "default" | "elevated" | "outlined";
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode
-  variant?: 'default' | 'elevated' | 'outlined'
+  variant?: CardVariant;
 }
 
+const variantClasses: Record<CardVariant, string> = {
+  default: "bg-white border border-gray-200 shadow-sm",
+  elevated: "bg-white border border-gray-100 shadow-md",
+  outlined: "bg-white border-2 border-gray-200",
+};
+
 export function Card({
-  className,
   children,
-  variant = 'default',
+  variant = "default",
+  className,
   ...props
 }: CardProps) {
   return (
     <div
-      className={cn(
-        'rounded-lg',
-        {
-          'bg-white border border-gray-200 shadow-sm': variant === 'default',
-          'bg-white shadow-md border border-gray-100': variant === 'elevated',
-          'bg-white border-2 border-gray-200': variant === 'outlined',
-        },
-        className,
-      )}
+      className={cn("rounded-lg", variantClasses[variant], className)}
       {...props}
     >
       {children}
     </div>
-  )
+  );
 }
 
-interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode
-}
-
-export function CardHeader({ className, children, ...props }: CardHeaderProps) {
+export function CardHeader({
+  children,
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className={cn('px-6 py-4 border-b border-gray-100', className)}
-      {...props}
-    >
+    <div className={cn("border-b border-gray-100 p-5", className)} {...props}>
       {children}
     </div>
-  )
+  );
 }
 
-interface CardBodyProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode
-}
-
-export function CardBody({ className, children, ...props }: CardBodyProps) {
+export function CardBody({
+  children,
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('px-6 py-4', className)} {...props}>
+    <div className={cn("p-5", className)} {...props}>
       {children}
     </div>
-  )
+  );
 }
 
-interface CardFooterProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode
-}
-
-export function CardFooter({ className, children, ...props }: CardFooterProps) {
+export function CardFooter({
+  children,
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className={cn('px-6 py-4 border-t border-gray-100', className)}
-      {...props}
-    >
+    <div className={cn("border-t border-gray-100 p-5", className)} {...props}>
       {children}
     </div>
-  )
+  );
 }
