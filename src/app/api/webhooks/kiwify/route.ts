@@ -261,8 +261,12 @@ function normalizeDate(value: unknown) {
 
   const raw = String(value).trim();
 
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw)) {
-    return raw.replace(" ", "T");
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(raw)) {
+    return `${raw.replace(" ", "T")}:00-03:00`;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
+    return `${raw.replace(" ", "T")}-03:00`;
   }
 
   return raw;
