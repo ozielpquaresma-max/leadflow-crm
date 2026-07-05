@@ -423,7 +423,11 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
           </p>
         </div>
 
-        <form action="/recuperacao" method="get" className="flex flex-col gap-3 lg:flex-row">
+        <form
+          action="/recuperacao"
+          method="get"
+          className="flex flex-col gap-3 lg:flex-row"
+        >
           {filtroAtivo !== "todos" ? (
             <input type="hidden" name="filtro" value={filtroAtivo} />
           ) : null}
@@ -518,7 +522,10 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                 <span>
                   {" "}
                   Busca aplicada:{" "}
-                  <span className="font-semibold text-slate-700">“{busca}”</span>.
+                  <span className="font-semibold text-slate-700">
+                    “{busca}”
+                  </span>
+                  .
                 </span>
               ) : null}
             </p>
@@ -641,6 +648,13 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                 </div>
 
                 <div className="mt-4 border-t border-slate-100 pt-4">
+                  <Link
+                    href={`/recuperacao/${venda.pedido_id}`}
+                    className="mb-3 flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    Ver detalhes
+                  </Link>
+
                   <RecoveryActions
                     empresaId={venda.empresa_id}
                     clienteId={venda.cliente_id}
@@ -765,7 +779,14 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                     </td>
 
                     <td className="px-5 py-4 align-top">
-                      <div className="min-w-[240px]">
+                      <div className="min-w-[240px] space-y-3">
+                        <Link
+                          href={`/recuperacao/${venda.pedido_id}`}
+                          className="flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                        >
+                          Ver detalhes
+                        </Link>
+
                         <RecoveryActions
                           empresaId={venda.empresa_id}
                           clienteId={venda.cliente_id}
