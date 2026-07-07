@@ -25,7 +25,7 @@ const navItems: NavItem[] = [
   { label: "Automações", icon: "zap", href: "/automacoes" },
   { label: "Integrações", icon: "settings", href: "/integracoes" },
   { label: "Financeiro", icon: "dollarSign", href: ROUTES.INVOICES },
-  { label: "Configurações", icon: "settings", href: ROUTES.SETTINGS },
+  { label: "Configurações", icon: "settings", href: "/configuracoes" },
 ];
 
 interface SidebarProps {
@@ -77,6 +77,7 @@ export function Sidebar({ open = true, onToggle }: SidebarProps) {
               <span className="truncate text-base font-extrabold leading-tight text-gray-950">
                 ReyCart
               </span>
+
               <span className="truncate text-xs font-medium text-gray-500">
                 Recuperação de vendas
               </span>
