@@ -38,6 +38,10 @@ type RecoveryStatus =
   | "sem_resposta"
   | "perdido";
 
+type ModeloMensagem = {
+  mensagem: string;
+};
+
 const recoveryStatusLabels: Record<RecoveryStatus, string> = {
   convertido: "Convertido",
   aguardando_resposta: "Aguardar",
@@ -77,8 +81,7 @@ function montarWhatsappFinal({
   clienteTelefone?: string | null;
   mensagem: string;
 }) {
-  const telefone =
-    clienteTelefone || extrairTelefoneDoWhatsappUrl(whatsappUrl);
+  const telefone = clienteTelefone || extrairTelefoneDoWhatsappUrl(whatsappUrl);
 
   const linkComMensagem = montarLinkWhatsappComMensagem({
     telefone,
@@ -100,6 +103,80 @@ function montarWhatsappFinal({
   } catch {
     return whatsappUrl;
   }
+}
+
+function getPrimeiroNome(nome?: string | null) {
+  if (!nome) return "tudo bem";
+
+  const primeiroNome = nome.trim().split(" ")[0];
+
+  return primeiroNome || "tudo bem";
+}
+
+function formatCurrency(value?: number | null) {
+  if (!value) return "";
+
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
+}
+
+function aplicarVariaveisMensagem({
+  modelo,
+  clienteNome,
+  produtoNome,
+  valor,
+  checkoutUrl,
+  pixCode,
+}: {
+  modelo: string;
+  clienteNome?: string | null;
+  produtoNome?: string | null;
+  valor?: number | null;
+  checkoutUrl?: string | null;
+  pixCode?: string | null;
+}) {
+  return modelo
+    .replaceAll("{{nome}}", getPrimeiroNome(clienteNome))
+    .replaceAll("{{produto}}", produtoNome || "seu pedido")
+    .replaceAll("{{valor}}", formatCurrency(valor))
+    .replaceAll("{{checkout_url}}", checkoutUrl || "")
+    .replaceAll("{{pix}}", pixCode || "");
+}
+
+function getTipoModeloMensagem({
+  status,
+  statusRecuperacao,
+}: {
+  status?: string | null;
+  statusRecuperacao?: string | null;
+}) {
+  if (statusRecuperacao === "aguardando_resposta") {
+    return "aguardando_resposta";
+  }
+
+  if (statusRecuperacao === "sem_resposta") {
+    return "sem_resposta";
+  }
+
+  if (statusRecuperacao === "perdido") {
+    return "ultima_tentativa";
+  }
+
+  if (status === "pix_pendente") {
+    return "pix_pendente";
+  }
+
+  if (status === "checkout_abandonado") {
+    return "checkout_abandonado";
+  }
+
+  if (status === "cartao_recusado") {
+    return "cartao_recusado";
+  }
+
+  return "pix_pendente";
 }
 
 export function RecoveryActions({
@@ -130,25 +207,21 @@ export function RecoveryActions({
 
   const statusRecuperacaoAtual = selectedStatus || statusRecuperacao;
 
-  const mensagemInteligente = gerarMensagemRecuperacao({
-    clienteNome,
-    produtoNome,
-    status,
-    valor,
-    checkoutUrl,
-    pixCopiaCola: pixCode,
-    statusRecuperacao: statusRecuperacaoAtual,
-  });
+  const mensagemFallback =
+    gerarMensagemRecuperacao({
+      clienteNome,
+      produtoNome,
+      status,
+      valor,
+      checkoutUrl,
+      pixCopiaCola: pixCode,
+      statusRecuperacao: statusRecuperacaoAtual,
+    }) || whatsappMessage;
 
-  const mensagemWhatsapp = mensagemInteligente || whatsappMessage;
+  const hasWhatsapp = Boolean(
+    clienteTelefone || extrairTelefoneDoWhatsappUrl(whatsappUrl)
+  );
 
-  const whatsappUrlFinal = montarWhatsappFinal({
-    whatsappUrl,
-    clienteTelefone,
-    mensagem: mensagemWhatsapp,
-  });
-
-  const hasWhatsapp = Boolean(whatsappUrlFinal);
   const hasCheckout = Boolean(checkoutUrl);
   const hasPix = Boolean(pixCode);
 
@@ -172,15 +245,66 @@ export function RecoveryActions({
     }
   }
 
+  async function buscarMensagemDoSupabase() {
+    if (!empresaId) {
+      return mensagemFallback;
+    }
+
+    const tipo = getTipoModeloMensagem({
+      status,
+      statusRecuperacao: statusRecuperacaoAtual,
+    });
+
+    const { data, error } = await supabase
+      .from("modelos_mensagens")
+      .select("mensagem")
+      .eq("empresa_id", empresaId)
+      .eq("tipo", tipo)
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Erro ao buscar modelo de mensagem:", error.message);
+      return mensagemFallback;
+    }
+
+    const modelo = data as ModeloMensagem | null;
+
+    if (!modelo?.mensagem) {
+      return mensagemFallback;
+    }
+
+    return aplicarVariaveisMensagem({
+      modelo: modelo.mensagem,
+      clienteNome,
+      produtoNome,
+      valor,
+      checkoutUrl,
+      pixCode,
+    });
+  }
+
   async function handleOpenWhatsApp() {
-    if (!whatsappUrlFinal) return;
+    if (!hasWhatsapp) return;
 
     setRegisteringWhatsapp(true);
 
     try {
+      const mensagemFinal = await buscarMensagemDoSupabase();
+
+      const whatsappUrlFinal = montarWhatsappFinal({
+        whatsappUrl,
+        clienteTelefone,
+        mensagem: mensagemFinal,
+      });
+
+      if (!whatsappUrlFinal) {
+        return;
+      }
+
       await registerInteraction({
         canal: "whatsapp",
-        mensagem: mensagemWhatsapp,
+        mensagem: mensagemFinal,
         resultado: "whatsapp_aberto",
       });
 
@@ -296,7 +420,7 @@ export function RecoveryActions({
           disabled={registeringWhatsapp || !hasWhatsapp}
           className="flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
         >
-          {registeringWhatsapp ? "Registrando..." : "Chamar no WhatsApp"}
+          {registeringWhatsapp ? "Preparando..." : "Chamar no WhatsApp"}
         </button>
 
         <div className="grid grid-cols-2 gap-2">
