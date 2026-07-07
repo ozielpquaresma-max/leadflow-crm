@@ -1,13 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type Empresa = {
   id: string;
   nome: string | null;
-  slug: string | null;
+  email: string | null;
+  telefone: string | null;
+  cnpj_cpf: string | null;
+  documento?: string | null;
+  status: string | null;
+  webhook_secret: string | null;
+  webhook_secret_updated_at: string | null;
 };
 
 type WebhookLog = {
@@ -43,7 +49,7 @@ function formatDate(value: string | null) {
 }
 
 function getEventLabel(evento: string | null) {
-  if (!evento) return "Evento não informado";
+  if (!evento) return "Evento recebido";
 
   const labels: Record<string, string> = {
     pix_created: "PIX gerado",
@@ -52,7 +58,7 @@ function getEventLabel(evento: string | null) {
     checkout_abandoned: "Checkout abandonado",
     order_rejected: "Compra recusada",
     order_approved: "Compra aprovada",
-    kiwify_event: "Evento Kiwify",
+    kiwify_event: "Evento recebido",
     pix_pendente: "PIX pendente",
     checkout_abandonado: "Checkout abandonado",
     cartao_recusado: "Cartão recusado",
@@ -77,6 +83,16 @@ function getModeloLabel(tipo: string | null) {
   return labels[tipo] || tipo;
 }
 
+function maskSecret(secret: string | null) {
+  if (!secret) return "Chave não encontrada";
+
+  if (secret.length <= 12) {
+    return "••••••••";
+  }
+
+  return `${secret.slice(0, 6)}${"•".repeat(18)}${secret.slice(-6)}`;
+}
+
 function ConfigCard({
   title,
   description,
@@ -84,7 +100,7 @@ function ConfigCard({
 }: {
   title: string;
   description: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -98,7 +114,7 @@ function ConfigCard({
   );
 }
 
-function InfoRow({
+function InfoBox({
   label,
   value,
 }: {
@@ -126,7 +142,9 @@ export default function ConfiguracoesPage() {
   });
 
   const [loading, setLoading] = useState(true);
+  const [showSecret, setShowSecret] = useState(false);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [copiedSecret, setCopiedSecret] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const appUrl = useMemo(() => {
@@ -137,6 +155,7 @@ export default function ConfiguracoesPage() {
   }, []);
 
   const webhookUrl = `${appUrl}/api/webhooks/kiwify`;
+  const webhookSecret = data.empresa?.webhook_secret || "";
 
   const totalWebhooks = data.webhooks.length;
   const webhooksProcessados = data.webhooks.filter(
@@ -156,24 +175,51 @@ export default function ConfiguracoesPage() {
     setErrorMessage(null);
 
     try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw new Error(sessionError.message);
+      }
+
+      if (!session?.user) {
+        throw new Error("Sessão não encontrada.");
+      }
+
+      const { data: usuario, error: usuarioError } = await supabase
+        .from("usuarios")
+        .select("empresa_id")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle();
+
+      if (usuarioError) {
+        throw new Error(usuarioError.message);
+      }
+
+      const empresaId = usuario?.empresa_id as string | undefined;
+
+      if (!empresaId) {
+        throw new Error("Empresa vinculada à conta não encontrada.");
+      }
+
       const { data: empresa, error: empresaError } = await supabase
         .from("empresas")
-        .select("id, nome, slug")
-        .eq("slug", "leadflow-crm")
-        .single();
+        .select(
+          "id, nome, email, telefone, cnpj_cpf, documento, status, webhook_secret, webhook_secret_updated_at"
+        )
+        .eq("id", empresaId)
+        .maybeSingle();
 
       if (empresaError) {
         throw new Error(empresaError.message);
       }
 
-      if (!empresa?.id) {
-        throw new Error("Empresa leadflow-crm não encontrada.");
-      }
-
       const { data: webhooks, error: webhooksError } = await supabase
         .from("webhooks")
         .select("id, evento, processado, created_at")
-        .eq("empresa_id", empresa.id)
+        .eq("empresa_id", empresaId)
         .order("created_at", { ascending: false })
         .limit(10);
 
@@ -184,7 +230,7 @@ export default function ConfiguracoesPage() {
       const { data: modelos, error: modelosError } = await supabase
         .from("modelos_mensagens")
         .select("id, tipo, ativo, updated_at")
-        .eq("empresa_id", empresa.id)
+        .eq("empresa_id", empresaId)
         .order("updated_at", { ascending: false });
 
       if (modelosError) {
@@ -219,6 +265,18 @@ export default function ConfiguracoesPage() {
     }, 2000);
   }
 
+  async function copyWebhookSecret() {
+    if (!webhookSecret) return;
+
+    await navigator.clipboard.writeText(webhookSecret);
+
+    setCopiedSecret(true);
+
+    setTimeout(() => {
+      setCopiedSecret(false);
+    }, 2000);
+  }
+
   useEffect(() => {
     loadConfiguracoes();
   }, []);
@@ -234,8 +292,8 @@ export default function ConfiguracoesPage() {
           </h1>
 
           <p className="mt-2 max-w-4xl text-slate-600">
-            Central de controle do ReyCart para empresa, integração Kiwify,
-            webhooks, modelos de mensagens e ajustes operacionais.
+            Gerencie os principais ajustes da sua conta, integração de vendas e
+            mensagens de recuperação.
           </p>
         </div>
 
@@ -255,133 +313,148 @@ export default function ConfiguracoesPage() {
         </div>
       ) : null}
 
-      <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 p-5 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-blue-950">
-              Ambiente ReyCart ativo
-            </h2>
-
-            <p className="mt-1 text-sm text-blue-700">
-              Esta página centraliza os principais dados técnicos e operacionais
-              do sistema.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/recuperacao"
-              className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"
-            >
-              Recuperação
-            </Link>
-
-            <Link
-              href="/automacoes"
-              className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-xs font-bold text-blue-700 shadow-sm transition hover:bg-blue-50"
-            >
-              Automações
-            </Link>
-
-            <Link
-              href="/integracoes"
-              className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-xs font-bold text-blue-700 shadow-sm transition hover:bg-blue-50"
-            >
-              Integrações
-            </Link>
-          </div>
-        </div>
-      </div>
-
       {loading ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
-          Carregando configurações do ReyCart...
+          Carregando configurações...
         </div>
       ) : (
         <div className="grid gap-6 xl:grid-cols-2">
           <ConfigCard
-            title="Empresa"
-            description="Dados internos usados para vincular pedidos, webhooks e automações."
+            title="Conta"
+            description="Informações principais da empresa conectada ao ReyCart."
           >
             <div className="grid gap-3 md:grid-cols-2">
-              <InfoRow
-                label="Nome da empresa"
-                value={data.empresa?.nome || "LeadFlow CRM"}
+              <InfoBox
+                label="Empresa"
+                value={data.empresa?.nome || "Minha empresa"}
               />
 
-              <InfoRow
-                label="Slug interno"
-                value={data.empresa?.slug || "leadflow-crm"}
+              <InfoBox
+                label="Status da conta"
+                value={data.empresa?.status || "Ativa"}
               />
 
-              <div className="md:col-span-2">
-                <InfoRow
-                  label="ID da empresa"
-                  value={data.empresa?.id || "Não encontrado"}
-                />
-              </div>
+              <InfoBox
+                label="Documento"
+                value={
+                  data.empresa?.cnpj_cpf ||
+                  data.empresa?.documento ||
+                  "Não informado"
+                }
+              />
+
+              <InfoBox
+                label="WhatsApp"
+                value={data.empresa?.telefone || "Não informado"}
+              />
             </div>
 
-            <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">
-              O slug interno ainda pode continuar como{" "}
-              <span className="font-bold">leadflow-crm</span>. Isso não aparece
-              para o cliente final e não precisa ser trocado agora.
+            <div className="mt-5">
+              <Link
+                href="/perfil"
+                className="inline-flex rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+              >
+                Editar dados da conta
+              </Link>
             </div>
           </ConfigCard>
 
           <ConfigCard
-            title="Webhook Kiwify"
-            description="URL usada pela Kiwify para enviar vendas, PIX pendentes e carrinhos abandonados."
+            title="Integração da plataforma"
+            description="Use a URL do webhook e a chave secreta para conectar sua plataforma de venda ao ReyCart."
           >
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="break-all font-mono text-sm text-slate-700">
-                {webhookUrl}
-              </p>
+            <div className="space-y-4">
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  URL do webhook
+                </p>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="break-all font-mono text-sm text-slate-700">
+                    {webhookUrl}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Chave secreta de integração
+                </p>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="break-all font-mono text-sm text-slate-700">
+                    {showSecret ? webhookSecret : maskSecret(webhookSecret)}
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={copyWebhookUrl}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"
+                className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
               >
                 {copiedWebhook ? "URL copiada" : "Copiar URL"}
               </button>
 
-              <Link
-                href="/integracoes"
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+              <button
+                type="button"
+                onClick={copyWebhookSecret}
+                disabled={!webhookSecret}
+                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                Ver integração
-              </Link>
+                {copiedSecret ? "Chave copiada" : "Copiar chave"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowSecret((current) => !current)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+              >
+                {showSecret ? "Ocultar chave" : "Mostrar chave"}
+              </button>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-700">
+              Use essa chave somente dentro da sua plataforma de venda. Não
+              compartilhe publicamente. Ela identifica os eventos enviados para
+              a sua conta ReyCart.
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-3">
-              <InfoRow label="Método" value="POST" />
-              <InfoRow label="Status" value="Ativo" />
-              <InfoRow label="Origem" value="Kiwify" />
+              <InfoBox label="Método" value="POST" />
+
+              <InfoBox label="Status" value="Ativo" />
+
+              <InfoBox
+                label="Chave atualizada"
+                value={formatDate(
+                  data.empresa?.webhook_secret_updated_at || null
+                )}
+              />
             </div>
           </ConfigCard>
 
           <ConfigCard
-            title="Status dos webhooks"
-            description="Resumo dos eventos mais recentes recebidos pelo ReyCart."
+            title="Status da integração"
+            description="Resumo dos últimos eventos recebidos pela sua conta."
           >
             <div className="grid gap-3 md:grid-cols-3">
-              <InfoRow label="Últimos eventos" value={totalWebhooks} />
-              <InfoRow label="Processados" value={webhooksProcessados} />
-              <InfoRow label="Com erro" value={webhooksComErro} />
+              <InfoBox label="Últimos eventos" value={totalWebhooks} />
+              <InfoBox label="Processados" value={webhooksProcessados} />
+              <InfoBox label="Com erro" value={webhooksComErro} />
             </div>
 
             <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Último webhook
+                Último evento recebido
               </p>
 
               <p className="mt-2 text-sm font-bold text-slate-950">
                 {ultimoWebhook
                   ? getEventLabel(ultimoWebhook.evento)
-                  : "Nenhum webhook recebido"}
+                  : "Nenhum evento recebido"}
               </p>
 
               <p className="mt-1 text-xs text-slate-500">
@@ -391,53 +464,27 @@ export default function ConfiguracoesPage() {
               </p>
             </div>
 
-            <div className="mt-4 space-y-3">
-              {data.webhooks.slice(0, 5).map((webhook) => (
-                <div
-                  key={webhook.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4"
-                >
-                  <div>
-                    <p className="text-sm font-bold text-slate-950">
-                      {getEventLabel(webhook.evento)}
-                    </p>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      {formatDate(webhook.created_at)}
-                    </p>
-                  </div>
-
-                  <span
-                    className={
-                      webhook.processado
-                        ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100"
-                        : "rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700 ring-1 ring-red-100"
-                    }
-                  >
-                    {webhook.processado ? "Processado" : "Erro"}
-                  </span>
-                </div>
-              ))}
-
-              {data.webhooks.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
-                  Nenhum webhook recebido ainda.
-                </div>
-              ) : null}
+            <div className="mt-5">
+              <Link
+                href="/integracoes"
+                className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+              >
+                Abrir detalhes da integração
+              </Link>
             </div>
           </ConfigCard>
 
           <ConfigCard
-            title="Modelos de mensagens"
-            description="Mensagens salvas no Supabase e usadas no botão de WhatsApp."
+            title="Mensagens de recuperação"
+            description="Modelos usados para chamar clientes pelo WhatsApp."
           >
             <div className="grid gap-3 md:grid-cols-2">
-              <InfoRow label="Modelos cadastrados" value={data.modelos.length} />
-              <InfoRow label="Modelos ativos" value={modelosAtivos} />
+              <InfoBox label="Modelos cadastrados" value={data.modelos.length} />
+              <InfoBox label="Modelos ativos" value={modelosAtivos} />
             </div>
 
             <div className="mt-4 space-y-3">
-              {data.modelos.map((modelo) => (
+              {data.modelos.slice(0, 4).map((modelo) => (
                 <div
                   key={modelo.id}
                   className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4"
@@ -482,38 +529,62 @@ export default function ConfiguracoesPage() {
           </ConfigCard>
 
           <ConfigCard
-            title="Ambiente do aplicativo"
-            description="Informações públicas do ambiente usado no deploy."
+            title="Atalhos"
+            description="Acesse rapidamente as principais áreas do ReyCart."
           >
-            <div className="grid gap-3">
-              <InfoRow label="Aplicativo" value="ReyCart" />
-              <InfoRow label="URL pública" value={appUrl} />
-              <InfoRow label="Banco de dados" value="Supabase" />
-              <InfoRow label="Deploy" value="Vercel" />
+            <div className="grid gap-3 md:grid-cols-3">
+              <Link
+                href="/recuperacao"
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50"
+              >
+                <p className="text-sm font-bold text-slate-950">Recuperação</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Ver vendas pendentes.
+                </p>
+              </Link>
+
+              <Link
+                href="/automacoes"
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50"
+              >
+                <p className="text-sm font-bold text-slate-950">Automações</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Editar mensagens.
+                </p>
+              </Link>
+
+              <Link
+                href="/integracoes"
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50"
+              >
+                <p className="text-sm font-bold text-slate-950">Integrações</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Ver eventos recebidos.
+                </p>
+              </Link>
             </div>
           </ConfigCard>
 
           <ConfigCard
-            title="Próximas configurações"
-            description="Itens que vamos liberar nas próximas etapas do SaaS."
+            title="Ajuda"
+            description="Use o diagnóstico guiado para resolver dúvidas ou enviar um resumo ao suporte."
           >
-            <div className="space-y-3">
-              {[
-                "Editar nome público da empresa",
-                "Configurar assinatura e plano do cliente",
-                "Gerenciar usuários da conta",
-                "Configurar múltiplas plataformas",
-                "Definir tempo automático de follow-up",
-                "Ativar notificações internas",
-              ].map((item) => (
-                <div
-                  key={item}
-                  className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4"
-                >
-                  <div className="h-2.5 w-2.5 rounded-full bg-blue-600" />
-                  <p className="text-sm font-semibold text-slate-700">{item}</p>
-                </div>
-              ))}
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
+              <p className="text-sm font-bold text-blue-950">
+                Precisa de suporte?
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-blue-700">
+                A central de ajuda gera um diagnóstico com base no problema e
+                cria um resumo pronto para envio.
+              </p>
+
+              <Link
+                href="/ajuda"
+                className="mt-4 inline-flex rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+              >
+                Abrir ajuda inteligente
+              </Link>
             </div>
           </ConfigCard>
         </div>
