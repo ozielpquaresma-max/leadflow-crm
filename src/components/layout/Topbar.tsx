@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icons } from "@/lib/icons";
@@ -82,6 +82,7 @@ export function Topbar({
   const notificationMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [searchFocus, setSearchFocus] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -193,6 +194,19 @@ export function Topbar({
     }
   }
 
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const query = searchTerm.trim();
+
+    if (!query) {
+      router.push("/recuperacao");
+      return;
+    }
+
+    router.push(`/recuperacao?q=${encodeURIComponent(query)}`);
+  }
+
   function goToProfile() {
     setProfileMenuOpen(false);
     router.push("/perfil");
@@ -206,10 +220,6 @@ export function Topbar({
   function goToHelp() {
     setProfileMenuOpen(false);
     router.push("/ajuda");
-  }
-
-  function goToNewLead() {
-    router.push("/recuperacao");
   }
 
   function openNotifications() {
@@ -236,27 +246,20 @@ export function Topbar({
 
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
-      <div className="max-w-sm flex-1">
+      <form onSubmit={handleSearch} className="max-w-sm flex-1">
         <Input
-          type="text"
-          placeholder="Buscar leads, clientes, negócios..."
+          type="search"
+          value={searchTerm}
+          placeholder="Buscar oportunidades..."
           leftIcon={Icons.search(18)}
+          onChange={(event) => setSearchTerm(event.target.value)}
           onFocus={() => setSearchFocus(true)}
           onBlur={() => setSearchFocus(false)}
           className={cn(searchFocus ? "border-blue-500" : "")}
         />
-      </div>
+      </form>
 
       <div className="ml-6 flex items-center gap-4">
-        <button
-          type="button"
-          onClick={goToNewLead}
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-gray-900 transition hover:bg-gray-100"
-        >
-          {Icons.plus(18)}
-          <span>Nova oportunidade</span>
-        </button>
-
         <div ref={notificationMenuRef} className="relative">
           <button
             type="button"
