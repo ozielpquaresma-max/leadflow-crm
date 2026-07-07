@@ -1,6 +1,7 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 type MessageTemplate = {
   id: string;
@@ -9,6 +10,18 @@ type MessageTemplate = {
   status: string;
   badgeClass: string;
   message: string;
+};
+
+type ModeloMensagemDB = {
+  id: string;
+  empresa_id: string;
+  tipo: string;
+  titulo: string;
+  descricao: string | null;
+  mensagem: string;
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 const defaultTemplates: MessageTemplate[] = [
@@ -76,9 +89,111 @@ const variables = [
   "{{pix}}",
 ];
 
+function mergeTemplates(dbTemplates: ModeloMensagemDB[]) {
+  return defaultTemplates.map((defaultTemplate) => {
+    const dbTemplate = dbTemplates.find(
+      (template) => template.tipo === defaultTemplate.id
+    );
+
+    if (!dbTemplate) {
+      return defaultTemplate;
+    }
+
+    return {
+      ...defaultTemplate,
+      title: dbTemplate.titulo || defaultTemplate.title,
+      description: dbTemplate.descricao || defaultTemplate.description,
+      message: dbTemplate.mensagem || defaultTemplate.message,
+    };
+  });
+}
+
 export default function AutomacoesPage() {
-  const [templates, setTemplates] = useState(defaultTemplates);
+  const [templates, setTemplates] = useState<MessageTemplate[]>(defaultTemplates);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [savingAll, setSavingAll] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  async function loadTemplates() {
+    setLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const { data: empresa, error: empresaError } = await supabase
+        .from("empresas")
+        .select("id")
+        .eq("slug", "leadflow-crm")
+        .single();
+
+      if (empresaError) {
+        throw empresaError;
+      }
+
+      if (!empresa?.id) {
+        throw new Error("Empresa leadflow-crm não encontrada.");
+      }
+
+      setEmpresaId(empresa.id);
+
+      const { data: modelos, error: modelosError } = await supabase
+        .from("modelos_mensagens")
+        .select("*")
+        .eq("empresa_id", empresa.id)
+        .eq("ativo", true)
+        .order("created_at", { ascending: true });
+
+      if (modelosError) {
+        throw modelosError;
+      }
+
+      const modelosBanco = (modelos || []) as ModeloMensagemDB[];
+
+      if (modelosBanco.length === 0) {
+        const registrosPadrao = defaultTemplates.map((template) => ({
+          empresa_id: empresa.id,
+          tipo: template.id,
+          titulo: template.title,
+          descricao: template.description,
+          mensagem: template.message,
+          ativo: true,
+          updated_at: new Date().toISOString(),
+        }));
+
+        const { error: insertError } = await supabase
+          .from("modelos_mensagens")
+          .upsert(registrosPadrao, {
+            onConflict: "empresa_id,tipo",
+          });
+
+        if (insertError) {
+          throw insertError;
+        }
+
+        setTemplates(defaultTemplates);
+        return;
+      }
+
+      setTemplates(mergeTemplates(modelosBanco));
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro desconhecido ao carregar modelos.";
+
+      setErrorMessage(message);
+      console.error("Erro ao carregar modelos:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function updateMessage(id: string, message: string) {
     setTemplates((currentTemplates) =>
@@ -86,6 +201,100 @@ export default function AutomacoesPage() {
         template.id === id ? { ...template, message } : template
       )
     );
+  }
+
+  async function saveTemplate(template: MessageTemplate) {
+    if (!empresaId) {
+      setErrorMessage("Empresa não carregada. Atualize a página e tente novamente.");
+      return;
+    }
+
+    setSavingId(template.id);
+    setSavedId(null);
+    setErrorMessage(null);
+
+    try {
+      const { error } = await supabase.from("modelos_mensagens").upsert(
+        {
+          empresa_id: empresaId,
+          tipo: template.id,
+          titulo: template.title,
+          descricao: template.description,
+          mensagem: template.message,
+          ativo: true,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "empresa_id,tipo",
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      setSavedId(template.id);
+
+      setTimeout(() => {
+        setSavedId(null);
+      }, 2500);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao salvar modelo.";
+
+      setErrorMessage(message);
+      console.error("Erro ao salvar modelo:", error);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function saveAllTemplates() {
+    if (!empresaId) {
+      setErrorMessage("Empresa não carregada. Atualize a página e tente novamente.");
+      return;
+    }
+
+    setSavingAll(true);
+    setSavedId(null);
+    setErrorMessage(null);
+
+    try {
+      const registros = templates.map((template) => ({
+        empresa_id: empresaId,
+        tipo: template.id,
+        titulo: template.title,
+        descricao: template.description,
+        mensagem: template.message,
+        ativo: true,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase.from("modelos_mensagens").upsert(
+        registros,
+        {
+          onConflict: "empresa_id,tipo",
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      setSavedId("todos");
+
+      setTimeout(() => {
+        setSavedId(null);
+      }, 2500);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao salvar modelos.";
+
+      setErrorMessage(message);
+      console.error("Erro ao salvar modelos:", error);
+    } finally {
+      setSavingAll(false);
+    }
   }
 
   async function copyMessage(template: MessageTemplate) {
@@ -114,10 +323,48 @@ export default function AutomacoesPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          Primeira versão: edição local dos modelos. Depois vamos salvar no
-          Supabase.
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            onClick={loadTemplates}
+            disabled={loading}
+            className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "Carregando..." : "Recarregar"}
+          </button>
+
+          <button
+            type="button"
+            onClick={saveAllTemplates}
+            disabled={savingAll || loading}
+            className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {savingAll ? "Salvando..." : "Salvar todos"}
+          </button>
         </div>
+      </div>
+
+      {errorMessage ? (
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+          Erro: {errorMessage}
+        </div>
+      ) : null}
+
+      {savedId === "todos" ? (
+        <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-semibold text-emerald-700">
+          Todos os modelos foram salvos no Supabase.
+        </div>
+      ) : null}
+
+      <div className="mb-8 rounded-2xl border border-blue-100 bg-blue-50 p-5 shadow-sm">
+        <h2 className="text-lg font-bold text-blue-950">
+          Modelos conectados ao Supabase
+        </h2>
+
+        <p className="mt-1 text-sm text-blue-700">
+          Agora as alterações podem ser salvas no banco. Depois vamos conectar
+          esses modelos diretamente ao botão de WhatsApp da recuperação.
+        </p>
       </div>
 
       <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -142,55 +389,80 @@ export default function AutomacoesPage() {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        {templates.map((template) => (
-          <section
-            key={template.id}
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-slate-950">
-                    {template.title}
-                  </h2>
+      {loading ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
+          Carregando modelos de mensagens...
+        </div>
+      ) : (
+        <div className="grid gap-5 xl:grid-cols-2">
+          {templates.map((template) => (
+            <section
+              key={template.id}
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-slate-950">
+                      {template.title}
+                    </h2>
 
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${template.badgeClass}`}
-                  >
-                    {template.status}
-                  </span>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${template.badgeClass}`}
+                    >
+                      {template.status}
+                    </span>
+                  </div>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    {template.description}
+                  </p>
                 </div>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  {template.description}
-                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => copyMessage(template)}
+                    className="w-fit rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    {copiedId === template.id ? "Copiado" : "Copiar"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => saveTemplate(template)}
+                    disabled={savingId === template.id}
+                    className="w-fit rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {savingId === template.id
+                      ? "Salvando..."
+                      : savedId === template.id
+                      ? "Salvo"
+                      : "Salvar"}
+                  </button>
+                </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => copyMessage(template)}
-                className="w-fit rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-              >
-                {copiedId === template.id ? "Copiado" : "Copiar"}
-              </button>
-            </div>
+              <textarea
+                value={template.message}
+                onChange={(event) =>
+                  updateMessage(template.id, event.target.value)
+                }
+                className="min-h-[220px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
+              />
 
-            <textarea
-              value={template.message}
-              onChange={(event) =>
-                updateMessage(template.id, event.target.value)
-              }
-              className="min-h-[220px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
-            />
-
-            <p className="mt-3 text-xs text-slate-400">
-              Esse texto será usado como base para mensagens inteligentes no
-              WhatsApp.
-            </p>
-          </section>
-        ))}
-      </div>
+              <p className="mt-3 text-xs text-slate-400">
+                Esse texto será salvo em{" "}
+                <span className="font-semibold text-slate-500">
+                  modelos_mensagens
+                </span>{" "}
+                e poderá ser usado como base para mensagens inteligentes no
+                WhatsApp.
+              </p>
+            </section>
+          ))}
+        </div>
+      )}
     </main>
   );
 }
