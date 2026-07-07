@@ -22,6 +22,7 @@ const navItems: NavItem[] = [
   { label: "Clientes", icon: "users", href: ROUTES.CONTACTS },
   { label: "Propostas", icon: "fileText", href: ROUTES.PROPOSALS },
   { label: "Recuperação", icon: "dollarSign", href: "/recuperacao" },
+  { label: "Automações", icon: "zap", href: "/automacoes" },
   { label: "Integrações", icon: "settings", href: "/integracoes" },
   { label: "Financeiro", icon: "dollarSign", href: ROUTES.INVOICES },
   { label: "Configurações", icon: "settings", href: ROUTES.SETTINGS },
@@ -85,6 +86,7 @@ export function Sidebar({ open = true, onToggle }: SidebarProps) {
 
         {!isOpen ? (
           <button
+            type="button"
             onClick={handleToggle}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
             title="Abrir menu"
@@ -93,6 +95,7 @@ export function Sidebar({ open = true, onToggle }: SidebarProps) {
           </button>
         ) : (
           <button
+            type="button"
             onClick={handleToggle}
             className="ml-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
             title="Fechar menu"
@@ -143,6 +146,7 @@ export function Sidebar({ open = true, onToggle }: SidebarProps) {
 
       <div className="border-t border-gray-200 px-3 py-4">
         <button
+          type="button"
           className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-gray-700 transition-all duration-200 hover:bg-gray-100"
           title={!isOpen ? "Suporte" : undefined}
         >
