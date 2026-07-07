@@ -46,7 +46,7 @@ export function Topbar({
 
   function goToProfile() {
     setProfileMenuOpen(false);
-    router.push("/configuracoes");
+    router.push("/perfil");
   }
 
   function goToSettings() {
@@ -56,7 +56,7 @@ export function Topbar({
 
   function goToHelp() {
     setProfileMenuOpen(false);
-    router.push("/configuracoes");
+    router.push("/ajuda");
   }
 
   function goToNewLead() {
