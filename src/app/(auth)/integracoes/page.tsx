@@ -9,7 +9,7 @@ type WebhookLog = {
   plataforma_id: string | null;
   evento: string | null;
   processado: boolean | null;
-  payload: Record<string, unknown> | null;
+  payload: unknown;
   created_at: string | null;
 };
 
@@ -42,15 +42,23 @@ function getEventLabel(evento: string | null) {
     order_rejected: "Compra recusada",
     order_approved: "Compra aprovada",
     kiwify_event: "Evento Kiwify",
+    pix_pendente: "PIX pendente",
+    checkout_abandonado: "Checkout abandonado",
+    cartao_recusado: "Cartão recusado",
+    pago: "Compra aprovada",
   };
 
   return labels[evento] || evento;
 }
 
-function getPayloadText(payload: Record<string, unknown> | null) {
+function getPayloadText(payload: unknown) {
   if (!payload) return "Payload não disponível";
 
   try {
+    if (typeof payload === "string") {
+      return payload;
+    }
+
     return JSON.stringify(payload, null, 2);
   } catch {
     return "Payload não disponível";
@@ -95,8 +103,8 @@ export default function IntegracoesPage() {
   }, []);
 
   const totalWebhooks = data.logs.length;
-  const processados = data.logs.filter((log) => log.processado).length;
-  const comErro = data.logs.filter((log) => !log.processado).length;
+  const processados = data.logs.filter((log) => log.processado === true).length;
+  const comErro = data.logs.filter((log) => log.processado === false).length;
   const ultimoWebhook = data.logs[0] || null;
 
   async function loadIntegrationStatus() {
@@ -111,45 +119,34 @@ export default function IntegracoesPage() {
         .single();
 
       if (empresaError) {
-        throw empresaError;
+        throw new Error(empresaError.message);
       }
 
-      const { data: plataforma, error: plataformaError } = await supabase
-        .from("plataformas")
-        .select("id")
-        .eq("slug", "kiwify")
-        .single();
-
-      if (plataformaError) {
-        throw plataformaError;
-      }
-
-      if (!empresa?.id || !plataforma?.id) {
-        throw new Error("Empresa ou plataforma Kiwify não encontrada.");
+      if (!empresa?.id) {
+        throw new Error("Empresa leadflow-crm não encontrada.");
       }
 
       const { data: logs, error: logsError } = await supabase
         .from("webhooks")
-        .select("id, empresa_id, plataforma_id, evento, processado, payload, created_at")
+        .select(
+          "id, empresa_id, plataforma_id, evento, processado, payload, created_at"
+        )
         .eq("empresa_id", empresa.id)
-        .eq("plataforma_id", plataforma.id)
         .order("created_at", { ascending: false })
         .limit(20);
 
       if (logsError) {
-        throw logsError;
+        throw new Error(logsError.message);
       }
 
       setData({
         empresaId: empresa.id,
-        plataformaId: plataforma.id,
+        plataformaId: null,
         logs: (logs || []) as WebhookLog[],
       });
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Erro desconhecido ao carregar integração.";
+        error instanceof Error ? error.message : "Erro desconhecido.";
 
       setErrorMessage(message);
       console.error("Erro ao carregar integração:", error);
@@ -287,7 +284,11 @@ export default function IntegracoesPage() {
         <MetricCard
           title="Último evento"
           value={ultimoWebhook ? getEventLabel(ultimoWebhook.evento) : "Nenhum"}
-          helper={ultimoWebhook ? formatDate(ultimoWebhook.created_at) : "Sem eventos ainda"}
+          helper={
+            ultimoWebhook
+              ? formatDate(ultimoWebhook.created_at)
+              : "Sem eventos ainda"
+          }
         />
       </div>
 
