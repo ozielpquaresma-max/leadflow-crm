@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { RecoveryActions } from "@/features/recoveries/components/RecoveryActions";
+import { RecoveryAutoRefresh } from "@/features/recoveries/components/RecoveryAutoRefresh";
 import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -403,6 +404,8 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
           Erro ao carregar dados do Supabase: {error.message}
         </div>
       ) : null}
+
+      <RecoveryAutoRefresh intervalMs={15000} />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
