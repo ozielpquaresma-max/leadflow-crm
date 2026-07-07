@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { RecoveryActions } from "@/features/recoveries/components/RecoveryActions";
 import { supabase } from "@/lib/supabase";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type RecuperacaoVenda = {
   pedido_id: string;
   empresa_id: string | null;
@@ -86,6 +89,7 @@ function formatTempo(minutos: number | null) {
   }
 
   const dias = Math.floor(horas / 24);
+
   return `${dias} dia${dias > 1 ? "s" : ""}`;
 }
 
@@ -195,9 +199,13 @@ function getWhatsAppLink(venda: RecuperacaoVenda) {
 
   if (!telefone) return "#";
 
+  const telefoneComPais = telefone.startsWith("55") ? telefone : `55${telefone}`;
+
   const mensagem = getWhatsAppMessage(venda);
 
-  return `https://wa.me/55${telefone}?text=${encodeURIComponent(mensagem)}`;
+  return `https://wa.me/${telefoneComPais}?text=${encodeURIComponent(
+    mensagem
+  )}`;
 }
 
 function InfoItem({
@@ -289,7 +297,7 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
 
       {historicoError ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-700">
-          A oportunidade foi carregada, mas houve erro ao buscar o histórico:
+          A oportunidade foi carregada, mas houve erro ao buscar o histórico:{" "}
           {historicoError.message}
         </div>
       ) : null}
@@ -319,18 +327,18 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
 
             <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               <InfoItem label="Telefone" value={venda.cliente_telefone} />
+
               <InfoItem
                 label="Cidade/Estado"
                 value={
                   venda.cliente_cidade || venda.cliente_estado
                     ? `${venda.cliente_cidade || ""}${
-                        venda.cliente_cidade && venda.cliente_estado
-                          ? "/"
-                          : ""
+                        venda.cliente_cidade && venda.cliente_estado ? "/" : ""
                       }${venda.cliente_estado || ""}`
                     : null
                 }
               />
+
               <InfoItem
                 label="Última atualização"
                 value={formatData(venda.recuperacao_atualizada_em)}
@@ -360,20 +368,28 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
             </div>
 
             <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              <InfoItem label="Valor do pedido" value={formatCurrency(venda.valor)} />
+              <InfoItem
+                label="Valor do pedido"
+                value={formatCurrency(venda.valor)}
+              />
+
               <InfoItem
                 label="Forma de pagamento"
                 value={formatPagamento(venda.metodo_pagamento)}
               />
+
               <InfoItem
                 label="Tempo desde criação"
                 value={formatTempo(venda.minutos_desde_criacao)}
               />
+
               <InfoItem
                 label="Criado na plataforma"
                 value={formatData(venda.criado_na_plataforma)}
               />
+
               <InfoItem label="Pedido externo" value={venda.pedido_externo_id} />
+
               <InfoItem
                 label="Checkout"
                 value={venda.checkout_url ? "Disponível" : "Não informado"}
@@ -384,9 +400,11 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-semibold text-blue-600">Ações rápidas</p>
+
           <h2 className="mt-1 text-lg font-bold text-slate-950">
             Recuperar venda
           </h2>
+
           <p className="mt-1 text-sm text-slate-500">
             Use as ações abaixo para falar com o cliente, abrir checkout, copiar
             PIX ou registrar o resultado.
@@ -401,6 +419,12 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
               whatsappMessage={whatsappMessage}
               checkoutUrl={venda.checkout_url}
               pixCode={venda.pix_copia_cola}
+              clienteNome={venda.cliente_nome}
+              clienteTelefone={venda.cliente_telefone}
+              produtoNome={venda.produto_nome}
+              status={venda.status}
+              valor={venda.valor}
+              statusRecuperacao={venda.status_recuperacao}
             />
           </div>
         </div>
@@ -411,6 +435,7 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
           <h2 className="text-lg font-semibold text-slate-950">
             Histórico de contatos
           </h2>
+
           <p className="mt-1 text-sm text-slate-500">
             Registro das ações realizadas nesta oportunidade.
           </p>

@@ -2,6 +2,9 @@ import Link from "next/link";
 import { RecoveryActions } from "@/features/recoveries/components/RecoveryActions";
 import { supabase } from "@/lib/supabase";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type RecuperacaoVenda = {
   pedido_id: string;
   empresa_id: string | null;
@@ -69,6 +72,7 @@ function formatTempo(minutos: number | null) {
   }
 
   const dias = Math.floor(horas / 24);
+
   return `${dias} dia${dias > 1 ? "s" : ""}`;
 }
 
@@ -188,13 +192,18 @@ function getWhatsAppLink(venda: RecuperacaoVenda) {
 
   if (!telefone) return "#";
 
+  const telefoneComPais = telefone.startsWith("55") ? telefone : `55${telefone}`;
+
   const mensagem = getWhatsAppMessage(venda);
 
-  return `https://wa.me/55${telefone}?text=${encodeURIComponent(mensagem)}`;
+  return `https://wa.me/${telefoneComPais}?text=${encodeURIComponent(
+    mensagem
+  )}`;
 }
 
 function getTentativas(total: number | null) {
   const quantidade = total || 0;
+
   return `${quantidade} tentativa${quantidade === 1 ? "" : "s"}`;
 }
 
@@ -294,9 +303,9 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
     : "todos";
 
   const { data, error } = await supabase
-  .from("vw_recuperacao_vendas")
-  .select("*")
-  .order("criado_na_plataforma", { ascending: false });
+    .from("vw_recuperacao_vendas")
+    .select("*")
+    .order("criado_na_plataforma", { ascending: false });
 
   const vendas = (data || []) as RecuperacaoVenda[];
   const vendasBuscadas = buscarVendas(vendas, busca);
@@ -417,6 +426,7 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
           <h2 className="text-sm font-semibold text-slate-950">
             Buscar oportunidade
           </h2>
+
           <p className="text-xs text-slate-500">
             Pesquise por nome, e-mail, telefone, produto ou plataforma.
           </p>
@@ -464,6 +474,7 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
           <h2 className="text-sm font-semibold text-slate-950">
             Filtrar oportunidades
           </h2>
+
           <p className="text-xs text-slate-500">
             Separe rapidamente por tipo de pedido ou resultado da recuperação.
           </p>
@@ -573,6 +584,7 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                     <p className="text-xs font-medium text-slate-400">
                       Produto
                     </p>
+
                     <p className="mt-1 font-medium text-slate-800">
                       {venda.produto_nome || "Produto não informado"}
                     </p>
@@ -582,6 +594,7 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                     <p className="text-xs font-medium text-slate-400">
                       Plataforma
                     </p>
+
                     <p className="mt-1 text-slate-700">
                       {venda.plataforma_nome || "Não informado"}
                     </p>
@@ -591,6 +604,7 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                     <p className="text-xs font-medium text-slate-400">
                       Pagamento
                     </p>
+
                     <p className="mt-1 text-slate-700">
                       {formatPagamento(venda.metodo_pagamento)}
                     </p>
@@ -598,6 +612,7 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
 
                   <div>
                     <p className="text-xs font-medium text-slate-400">Tempo</p>
+
                     <p className="mt-1 text-slate-700">
                       {formatTempo(venda.minutos_desde_criacao)}
                     </p>
@@ -605,6 +620,7 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
 
                   <div>
                     <p className="text-xs font-medium text-slate-400">Valor</p>
+
                     <p className="mt-1 font-semibold text-slate-950">
                       {formatCurrency(venda.valor)}
                     </p>
@@ -634,12 +650,15 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                     <p className="text-xs font-medium text-slate-400">
                       Último contato
                     </p>
+
                     <p className="mt-1 font-medium text-slate-800">
                       {formatResultado(venda.ultima_interacao_resultado)}
                     </p>
+
                     <p className="text-xs text-slate-500">
                       {formatDataContato(venda.ultima_interacao_em)}
                     </p>
+
                     <p className="text-xs text-slate-500">
                       {getTentativas(venda.total_interacoes)}
                     </p>
@@ -662,6 +681,12 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                     whatsappMessage={whatsappMessage}
                     checkoutUrl={venda.checkout_url}
                     pixCode={venda.pix_copia_cola}
+                    clienteNome={venda.cliente_nome}
+                    clienteTelefone={venda.cliente_telefone}
+                    produtoNome={venda.produto_nome}
+                    status={venda.status}
+                    valor={venda.valor}
+                    statusRecuperacao={venda.status_recuperacao}
                   />
                 </div>
               </div>
@@ -794,6 +819,12 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                           whatsappMessage={whatsappMessage}
                           checkoutUrl={venda.checkout_url}
                           pixCode={venda.pix_copia_cola}
+                          clienteNome={venda.cliente_nome}
+                          clienteTelefone={venda.cliente_telefone}
+                          produtoNome={venda.produto_nome}
+                          status={venda.status}
+                          valor={venda.valor}
+                          statusRecuperacao={venda.status_recuperacao}
                         />
                       </div>
                     </td>
