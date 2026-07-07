@@ -16,15 +16,9 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", icon: "layoutDashboard", href: ROUTES.DASHBOARD },
-  { label: "Leads", icon: "zap", href: ROUTES.LEADS },
-  { label: "Pipeline", icon: "trendingUp", href: ROUTES.PIPELINE },
-  { label: "Agenda", icon: "calendar", href: ROUTES.CALENDAR },
-  { label: "Clientes", icon: "users", href: ROUTES.CONTACTS },
-  { label: "Propostas", icon: "fileText", href: ROUTES.PROPOSALS },
   { label: "Recuperação", icon: "dollarSign", href: "/recuperacao" },
   { label: "Automações", icon: "zap", href: "/automacoes" },
   { label: "Integrações", icon: "settings", href: "/integracoes" },
-  { label: "Financeiro", icon: "dollarSign", href: ROUTES.INVOICES },
   { label: "Configurações", icon: "settings", href: "/configuracoes" },
 ];
 
@@ -146,15 +140,24 @@ export function Sidebar({ open = true, onToggle }: SidebarProps) {
       </nav>
 
       <div className="border-t border-gray-200 px-3 py-4">
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-gray-700 transition-all duration-200 hover:bg-gray-100"
-          title={!isOpen ? "Suporte" : undefined}
+        <div
+          className={cn(
+            "rounded-2xl bg-blue-50 px-4 py-3",
+            isOpen ? "block" : "flex justify-center px-2"
+          )}
         >
-          <span className="flex-shrink-0">{Icons.helpCircle(20)}</span>
+          {isOpen ? (
+            <>
+              <p className="text-xs font-bold text-blue-700">ReyCart</p>
 
-          {isOpen ? <span className="text-sm font-medium">Suporte</span> : null}
-        </button>
+              <p className="mt-1 text-xs leading-5 text-blue-600">
+                Sistema ativo para recuperação de vendas.
+              </p>
+            </>
+          ) : (
+            <span className="text-xs font-black text-blue-700">RC</span>
+          )}
+        </div>
       </div>
     </div>
   );
