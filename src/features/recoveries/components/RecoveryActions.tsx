@@ -2,15 +2,28 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import {
+  gerarMensagemRecuperacao,
+  montarLinkWhatsappComMensagem,
+} from "@/features/recoveries/utils/recoveryMessages";
 
 type RecoveryActionsProps = {
   empresaId: string | null;
   clienteId: string | null;
   pedidoId: string;
+
   whatsappUrl: string;
   whatsappMessage: string;
+
   checkoutUrl: string | null;
   pixCode: string | null;
+
+  clienteNome?: string | null;
+  clienteTelefone?: string | null;
+  produtoNome?: string | null;
+  status?: string | null;
+  valor?: number | null;
+  statusRecuperacao?: string | null;
 };
 
 type InteractionData = {
@@ -32,6 +45,63 @@ const recoveryStatusLabels: Record<RecoveryStatus, string> = {
   perdido: "Perdido",
 };
 
+function extrairTelefoneDoWhatsappUrl(url: string) {
+  if (!url || url === "#") return null;
+
+  try {
+    const parsedUrl = new URL(url);
+
+    if (parsedUrl.hostname.includes("wa.me")) {
+      const telefone = parsedUrl.pathname.replace(/\D/g, "");
+      return telefone || null;
+    }
+
+    const phoneParam = parsedUrl.searchParams.get("phone");
+
+    if (phoneParam) {
+      return phoneParam.replace(/\D/g, "");
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function montarWhatsappFinal({
+  whatsappUrl,
+  clienteTelefone,
+  mensagem,
+}: {
+  whatsappUrl: string;
+  clienteTelefone?: string | null;
+  mensagem: string;
+}) {
+  const telefone =
+    clienteTelefone || extrairTelefoneDoWhatsappUrl(whatsappUrl);
+
+  const linkComMensagem = montarLinkWhatsappComMensagem({
+    telefone,
+    mensagem,
+  });
+
+  if (linkComMensagem) {
+    return linkComMensagem;
+  }
+
+  if (!whatsappUrl || whatsappUrl === "#") {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(whatsappUrl);
+    parsedUrl.searchParams.set("text", mensagem);
+    return parsedUrl.toString();
+  } catch {
+    return whatsappUrl;
+  }
+}
+
 export function RecoveryActions({
   empresaId,
   clienteId,
@@ -40,6 +110,12 @@ export function RecoveryActions({
   whatsappMessage,
   checkoutUrl,
   pixCode,
+  clienteNome,
+  clienteTelefone,
+  produtoNome,
+  status,
+  valor,
+  statusRecuperacao,
 }: RecoveryActionsProps) {
   const [copied, setCopied] = useState(false);
   const [registeringWhatsapp, setRegisteringWhatsapp] = useState(false);
@@ -52,7 +128,27 @@ export function RecoveryActions({
     null
   );
 
-  const hasWhatsapp = Boolean(whatsappUrl && whatsappUrl !== "#");
+  const statusRecuperacaoAtual = selectedStatus || statusRecuperacao;
+
+  const mensagemInteligente = gerarMensagemRecuperacao({
+    clienteNome,
+    produtoNome,
+    status,
+    valor,
+    checkoutUrl,
+    pixCopiaCola: pixCode,
+    statusRecuperacao: statusRecuperacaoAtual,
+  });
+
+  const mensagemWhatsapp = mensagemInteligente || whatsappMessage;
+
+  const whatsappUrlFinal = montarWhatsappFinal({
+    whatsappUrl,
+    clienteTelefone,
+    mensagem: mensagemWhatsapp,
+  });
+
+  const hasWhatsapp = Boolean(whatsappUrlFinal);
   const hasCheckout = Boolean(checkoutUrl);
   const hasPix = Boolean(pixCode);
 
@@ -77,18 +173,18 @@ export function RecoveryActions({
   }
 
   async function handleOpenWhatsApp() {
-    if (!hasWhatsapp) return;
+    if (!whatsappUrlFinal) return;
 
     setRegisteringWhatsapp(true);
 
     try {
       await registerInteraction({
         canal: "whatsapp",
-        mensagem: whatsappMessage,
+        mensagem: mensagemWhatsapp,
         resultado: "whatsapp_aberto",
       });
 
-      window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+      window.open(whatsappUrlFinal, "_blank", "noopener,noreferrer");
     } finally {
       setRegisteringWhatsapp(false);
     }
