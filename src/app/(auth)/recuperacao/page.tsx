@@ -36,12 +36,7 @@ type FiltroRecuperacao =
   | "todos"
   | "pix_pendente"
   | "checkout_abandonado"
-  | "cartao_recusado"
-  | "pendente"
-  | "convertido"
-  | "aguardando_resposta"
-  | "sem_resposta"
-  | "perdido";
+  | "cartao_recusado";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -120,30 +115,6 @@ function formatPagamento(pagamento: string | null) {
   return labels[pagamento] || pagamento;
 }
 
-function formatStatusRecuperacao(status: string | null) {
-  if (!status || status === "pendente") return "Pendente";
-
-  const labels: Record<string, string> = {
-    convertido: "Convertido",
-    aguardando_resposta: "Aguardando",
-    sem_resposta: "Sem resposta",
-    perdido: "Perdido",
-  };
-
-  return labels[status] || status;
-}
-
-function formatDataStatusRecuperacao(data: string | null) {
-  if (!data) return "Ainda não atualizado";
-
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(data));
-}
-
 function getStatusClass(status: string | null) {
   if (status === "pix_pendente") {
     return "bg-amber-50 text-amber-700 ring-amber-100";
@@ -158,26 +129,6 @@ function getStatusClass(status: string | null) {
   }
 
   return "bg-slate-50 text-slate-700 ring-slate-100";
-}
-
-function getStatusRecuperacaoClass(status: string | null) {
-  if (status === "convertido") {
-    return "bg-emerald-50 text-emerald-700 ring-emerald-100";
-  }
-
-  if (status === "aguardando_resposta") {
-    return "bg-blue-50 text-blue-700 ring-blue-100";
-  }
-
-  if (status === "sem_resposta") {
-    return "bg-amber-50 text-amber-700 ring-amber-100";
-  }
-
-  if (status === "perdido") {
-    return "bg-red-50 text-red-700 ring-red-100";
-  }
-
-  return "bg-slate-50 text-slate-600 ring-slate-100";
 }
 
 function getWhatsAppMessage(venda: RecuperacaoVenda) {
@@ -208,53 +159,76 @@ function getTentativas(total: number | null) {
   return `${quantidade} tentativa${quantidade === 1 ? "" : "s"}`;
 }
 
-function getStatusRecuperacaoNormalizado(venda: RecuperacaoVenda) {
-  return venda.status_recuperacao || "pendente";
-}
-
 function normalizarTexto(texto: string | null | undefined) {
   return String(texto || "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w\s@.+-]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
-function buscarVendas(vendas: RecuperacaoVenda[], busca: string) {
-  const termo = normalizarTexto(busca);
+function normalizarTelefone(texto: string | null | undefined) {
+  return String(texto || "").replace(/\D/g, "");
+}
 
-  if (!termo) return vendas;
+function montarTextoBusca(venda: RecuperacaoVenda) {
+  const campos = [
+    venda.cliente_nome,
+    venda.cliente_email,
+    venda.cliente_telefone,
+    normalizarTelefone(venda.cliente_telefone),
+    venda.produto_nome,
+    venda.plataforma_nome,
+    venda.status_label,
+    venda.status,
+    venda.metodo_pagamento,
+    formatPagamento(venda.metodo_pagamento),
+    formatResultado(venda.ultima_interacao_resultado),
+    formatCurrency(venda.valor),
+  ];
+
+  return normalizarTexto(campos.filter(Boolean).join(" "));
+}
+
+function buscarVendas(vendas: RecuperacaoVenda[], busca: string) {
+  const termoOriginal = busca.trim();
+
+  if (!termoOriginal) return vendas;
+
+  const termoNormalizado = normalizarTexto(termoOriginal);
+  const termoNumerico = normalizarTelefone(termoOriginal);
+
+  const palavras = termoNormalizado
+    .split(" ")
+    .map((palavra) => palavra.trim())
+    .filter(Boolean);
 
   return vendas.filter((venda) => {
-    const campos = [
-      venda.cliente_nome,
-      venda.cliente_email,
-      venda.cliente_telefone,
-      venda.produto_nome,
-      venda.plataforma_nome,
-      venda.status_label,
-      venda.metodo_pagamento,
-      formatStatusRecuperacao(venda.status_recuperacao),
-    ];
+    const textoBusca = montarTextoBusca(venda);
+    const telefoneBusca = normalizarTelefone(venda.cliente_telefone);
 
-    return campos.some((campo) => normalizarTexto(campo).includes(termo));
+    if (termoNumerico && telefoneBusca.includes(termoNumerico)) {
+      return true;
+    }
+
+    if (textoBusca.includes(termoNormalizado)) {
+      return true;
+    }
+
+    if (palavras.length > 0) {
+      return palavras.every((palavra) => textoBusca.includes(palavra));
+    }
+
+    return false;
   });
 }
 
 function filtrarVendas(vendas: RecuperacaoVenda[], filtro: FiltroRecuperacao) {
   if (filtro === "todos") return vendas;
 
-  if (
-    filtro === "pix_pendente" ||
-    filtro === "checkout_abandonado" ||
-    filtro === "cartao_recusado"
-  ) {
-    return vendas.filter((venda) => venda.status === filtro);
-  }
-
-  return vendas.filter(
-    (venda) => getStatusRecuperacaoNormalizado(venda) === filtro
-  );
+  return vendas.filter((venda) => venda.status === filtro);
 }
 
 function getQuantidadeFiltro(
@@ -270,11 +244,6 @@ function isFiltroValido(filtro: string): filtro is FiltroRecuperacao {
     "pix_pendente",
     "checkout_abandonado",
     "cartao_recusado",
-    "pendente",
-    "convertido",
-    "aguardando_resposta",
-    "sem_resposta",
-    "perdido",
   ].includes(filtro);
 }
 
@@ -328,13 +297,9 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
     (venda) => venda.status === "cartao_recusado"
   ).length;
 
-  const convertidos = vendas.filter(
-    (venda) => venda.status_recuperacao === "convertido"
-  ).length;
-
   const cards = [
     {
-      label: "Valor em aberto",
+      label: "Valor recuperável",
       value: formatCurrency(totalPendente),
       helper: "Total disponível para recuperação",
     },
@@ -363,11 +328,6 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
     { label: "PIX", value: "pix_pendente" },
     { label: "Checkout", value: "checkout_abandonado" },
     { label: "Cartão", value: "cartao_recusado" },
-    { label: "Pendentes", value: "pendente" },
-    { label: "Convertidos", value: "convertido" },
-    { label: "Aguardando", value: "aguardando_resposta" },
-    { label: "Sem resposta", value: "sem_resposta" },
-    { label: "Perdidos", value: "perdido" },
   ];
 
   return (
@@ -391,11 +351,6 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
           <span className="font-semibold text-slate-950">{vendas.length}</span>{" "}
           oportunidade{vendas.length === 1 ? "" : "s"} em aberto
-          {convertidos > 0 ? (
-            <span className="ml-2 text-emerald-600">
-              • {convertidos} convertido{convertidos === 1 ? "" : "s"}
-            </span>
-          ) : null}
         </div>
       </div>
 
@@ -479,7 +434,7 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
           </h2>
 
           <p className="text-xs text-slate-500">
-            Separe rapidamente por tipo de pedido ou resultado da recuperação.
+            Separe rapidamente por tipo de pendência.
           </p>
         </div>
 
@@ -631,26 +586,6 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
 
                   <div>
                     <p className="text-xs font-medium text-slate-400">
-                      Recuperação
-                    </p>
-
-                    <span
-                      className={`mt-1 inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${getStatusRecuperacaoClass(
-                        venda.status_recuperacao
-                      )}`}
-                    >
-                      {formatStatusRecuperacao(venda.status_recuperacao)}
-                    </span>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      {formatDataStatusRecuperacao(
-                        venda.recuperacao_atualizada_em
-                      )}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-slate-400">
                       Último contato
                     </p>
 
@@ -710,7 +645,6 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                 <th className="w-[240px] px-5 py-4 font-medium">Cliente</th>
                 <th className="w-[230px] px-5 py-4 font-medium">Produto</th>
                 <th className="px-5 py-4 font-medium">Pedido</th>
-                <th className="px-5 py-4 font-medium">Recuperação</th>
                 <th className="px-5 py-4 font-medium">Valor</th>
                 <th className="px-5 py-4 font-medium">Contato</th>
                 <th className="px-5 py-4 font-medium">Ações</th>
@@ -769,22 +703,6 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
                       </p>
                     </td>
 
-                    <td className="px-5 py-4 align-top">
-                      <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${getStatusRecuperacaoClass(
-                          venda.status_recuperacao
-                        )}`}
-                      >
-                        {formatStatusRecuperacao(venda.status_recuperacao)}
-                      </span>
-
-                      <p className="mt-2 text-xs text-slate-500">
-                        {formatDataStatusRecuperacao(
-                          venda.recuperacao_atualizada_em
-                        )}
-                      </p>
-                    </td>
-
                     <td className="px-5 py-4 align-top font-semibold text-slate-950">
                       {formatCurrency(venda.valor)}
                     </td>
@@ -838,7 +756,7 @@ export default async function RecuperacaoPage({ searchParams }: PageProps) {
               {vendasFiltradas.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="px-5 py-12 text-center text-slate-500"
                   >
                     Nenhuma venda encontrada para este filtro ou busca.
