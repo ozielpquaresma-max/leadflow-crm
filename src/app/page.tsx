@@ -127,7 +127,7 @@ export default function HomePage() {
       }
 
       setSuccessMessage(
-        "Cadastro criado. Agora confirme seu e-mail, se a confirmação estiver ativa no Supabase, e depois faça login."
+        "Cadastro criado. Agora confirme seu e-mail, se a confirmação estiver ativa, e depois faça login."
       );
 
       setMode("login");
@@ -196,7 +196,7 @@ export default function HomePage() {
 
             <div className="mt-20 max-w-2xl">
               <span className="rounded-full border border-blue-300/30 bg-blue-500/10 px-4 py-2 text-sm font-bold text-blue-100">
-                SaaS para recuperar PIX, carrinhos e vendas perdidas
+                SaaS para recuperar vendas não finalizadas
               </span>
 
               <h1 className="mt-8 text-4xl font-black leading-tight tracking-tight md:text-6xl">
@@ -204,9 +204,9 @@ export default function HomePage() {
               </h1>
 
               <p className="mt-6 max-w-xl text-lg leading-8 text-slate-300">
-                O ReyCart recebe eventos da Kiwify, organiza oportunidades de
-                recuperação e ajuda sua equipe a chamar o cliente no WhatsApp
-                com mensagens inteligentes.
+                O ReyCart recebe eventos das suas plataformas de venda, organiza
+                oportunidades de recuperação e ajuda sua equipe a chamar o
+                cliente no WhatsApp com mensagens inteligentes.
               </p>
 
               <div className="mt-8 grid gap-4 sm:grid-cols-3">
@@ -236,7 +236,7 @@ export default function HomePage() {
 
           <div className="mt-12 grid gap-4 text-sm text-slate-300 md:grid-cols-3">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              Integração com webhook da Kiwify
+              Integração por webhook com plataformas de venda
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -294,7 +294,7 @@ export default function HomePage() {
 
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 {mode === "cadastro"
-                  ? "Cadastre sua empresa para começar a receber eventos da Kiwify e recuperar vendas."
+                  ? "Cadastre sua empresa para começar a receber eventos da sua plataforma de venda e recuperar pedidos não finalizados."
                   : "Entre com seu e-mail e senha para continuar gerenciando suas recuperações."}
               </p>
             </div>
@@ -404,8 +404,8 @@ export default function HomePage() {
                 </button>
 
                 <p className="text-center text-xs leading-5 text-slate-500">
-                  Ao criar sua conta, você poderá conectar a Kiwify e gerenciar
-                  suas oportunidades de recuperação no ReyCart.
+                  Ao criar sua conta, você poderá conectar sua plataforma de
+                  venda e gerenciar oportunidades de recuperação no ReyCart.
                 </p>
               </form>
             ) : (
