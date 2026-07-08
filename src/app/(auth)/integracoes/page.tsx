@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -13,9 +14,22 @@ type WebhookLog = {
   created_at: string | null;
 };
 
+type Integracao = {
+  id: string;
+  empresa_id: string;
+  plataforma: string;
+  nome: string;
+  token_plataforma: string | null;
+  tipo_token: string | null;
+  status: string | null;
+  ultimo_evento_em: string | null;
+  ultimo_evento_status: string | null;
+  updated_at: string | null;
+};
+
 type IntegrationStatus = {
   empresaId: string | null;
-  plataformaId: string | null;
+  integracao: Integracao | null;
   logs: WebhookLog[];
 };
 
@@ -65,6 +79,41 @@ function getPayloadText(payload: unknown) {
   }
 }
 
+function maskToken(token: string | null) {
+  if (!token) return "Token não cadastrado";
+
+  if (token.length <= 4) {
+    return "••••";
+  }
+
+  return `${token.slice(0, 2)}${"•".repeat(8)}${token.slice(-2)}`;
+}
+
+function getStatusLabel(status: string | null, hasToken: boolean) {
+  if (!hasToken) return "Pendente";
+
+  const labels: Record<string, string> = {
+    ativo: "Ativo",
+    pendente: "Pendente",
+    erro: "Erro",
+    inativo: "Inativo",
+  };
+
+  return labels[status || ""] || "Ativo";
+}
+
+function getStatusClass(status: string | null, hasToken: boolean) {
+  if (!hasToken || status === "pendente") {
+    return "bg-amber-50 text-amber-700 ring-amber-100";
+  }
+
+  if (status === "erro") {
+    return "bg-red-50 text-red-700 ring-red-100";
+  }
+
+  return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+}
+
 function MetricCard({
   title,
   value,
@@ -83,18 +132,39 @@ function MetricCard({
   );
 }
 
+function InfoBox({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        {label}
+      </p>
+
+      <p className="mt-1 break-all text-sm font-bold text-slate-950">
+        {value}
+      </p>
+    </div>
+  );
+}
+
 export default function IntegracoesPage() {
   const [data, setData] = useState<IntegrationStatus>({
     empresaId: null,
-    plataformaId: null,
+    integracao: null,
     logs: [],
   });
 
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [copiedFinalUrl, setCopiedFinalUrl] = useState(false);
+  const [copiedBaseUrl, setCopiedBaseUrl] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const webhookUrl = useMemo(() => {
+  const webhookBaseUrl = useMemo(() => {
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL ||
       "https://leadflow-crm-dusky-ten.vercel.app";
@@ -102,28 +172,91 @@ export default function IntegracoesPage() {
     return `${appUrl.replace(/\/$/, "")}/api/webhooks/kiwify`;
   }, []);
 
+  const tokenSalvo = data.integracao?.token_plataforma || "";
+  const webhookFinalUrl = tokenSalvo
+    ? `${webhookBaseUrl}?token=${encodeURIComponent(tokenSalvo)}`
+    : "";
+
+  const hasToken = Boolean(tokenSalvo);
   const totalWebhooks = data.logs.length;
   const processados = data.logs.filter((log) => log.processado === true).length;
   const comErro = data.logs.filter((log) => log.processado === false).length;
   const ultimoWebhook = data.logs[0] || null;
+
+  const statusLabel = getStatusLabel(data.integracao?.status || null, hasToken);
+  const statusClass = getStatusClass(data.integracao?.status || null, hasToken);
 
   async function loadIntegrationStatus() {
     setLoading(true);
     setErrorMessage(null);
 
     try {
-      const { data: empresa, error: empresaError } = await supabase
-        .from("empresas")
-        .select("id")
-        .eq("slug", "leadflow-crm")
-        .single();
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-      if (empresaError) {
-        throw new Error(empresaError.message);
+      if (sessionError) {
+        throw new Error(sessionError.message);
       }
 
-      if (!empresa?.id) {
-        throw new Error("Empresa leadflow-crm não encontrada.");
+      if (!session?.user) {
+        throw new Error("Sessão não encontrada.");
+      }
+
+      const { data: usuario, error: usuarioError } = await supabase
+        .from("usuarios")
+        .select("empresa_id")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle();
+
+      if (usuarioError) {
+        throw new Error(usuarioError.message);
+      }
+
+      const empresaId = usuario?.empresa_id as string | undefined;
+
+      if (!empresaId) {
+        throw new Error("Empresa vinculada à conta não encontrada.");
+      }
+
+      const { data: integracaoExistente, error: integracaoError } =
+        await supabase
+          .from("integracoes")
+          .select(
+            "id, empresa_id, plataforma, nome, token_plataforma, tipo_token, status, ultimo_evento_em, ultimo_evento_status, updated_at"
+          )
+          .eq("empresa_id", empresaId)
+          .eq("plataforma", "kiwify")
+          .maybeSingle();
+
+      if (integracaoError) {
+        throw new Error(integracaoError.message);
+      }
+
+      let integracao = integracaoExistente as Integracao | null;
+
+      if (!integracao) {
+        const { data: novaIntegracao, error: novaIntegracaoError } =
+          await supabase
+            .from("integracoes")
+            .insert({
+              empresa_id: empresaId,
+              plataforma: "kiwify",
+              nome: "Kiwify",
+              tipo_token: "query_token",
+              status: "pendente",
+            })
+            .select(
+              "id, empresa_id, plataforma, nome, token_plataforma, tipo_token, status, ultimo_evento_em, ultimo_evento_status, updated_at"
+            )
+            .single();
+
+        if (novaIntegracaoError) {
+          throw new Error(novaIntegracaoError.message);
+        }
+
+        integracao = novaIntegracao as Integracao;
       }
 
       const { data: logs, error: logsError } = await supabase
@@ -131,7 +264,7 @@ export default function IntegracoesPage() {
         .select(
           "id, empresa_id, plataforma_id, evento, processado, payload, created_at"
         )
-        .eq("empresa_id", empresa.id)
+        .eq("empresa_id", empresaId)
         .order("created_at", { ascending: false })
         .limit(20);
 
@@ -140,8 +273,8 @@ export default function IntegracoesPage() {
       }
 
       setData({
-        empresaId: empresa.id,
-        plataformaId: null,
+        empresaId,
+        integracao,
         logs: (logs || []) as WebhookLog[],
       });
     } catch (error) {
@@ -155,13 +288,25 @@ export default function IntegracoesPage() {
     }
   }
 
-  async function copyWebhookUrl() {
-    await navigator.clipboard.writeText(webhookUrl);
+  async function copyFinalWebhookUrl() {
+    if (!webhookFinalUrl) return;
 
-    setCopied(true);
+    await navigator.clipboard.writeText(webhookFinalUrl);
+
+    setCopiedFinalUrl(true);
 
     setTimeout(() => {
-      setCopied(false);
+      setCopiedFinalUrl(false);
+    }, 2000);
+  }
+
+  async function copyBaseWebhookUrl() {
+    await navigator.clipboard.writeText(webhookBaseUrl);
+
+    setCopiedBaseUrl(true);
+
+    setTimeout(() => {
+      setCopiedBaseUrl(false);
     }, 2000);
   }
 
@@ -180,8 +325,8 @@ export default function IntegracoesPage() {
           </h1>
 
           <p className="mt-2 max-w-3xl text-slate-600">
-            Acompanhe a conexão com a Kiwify, consulte a URL do webhook e veja
-            os últimos eventos recebidos pelo ReyCart.
+            Acompanhe a conexão com a Kiwify, veja a URL final do webhook e
+            monitore os eventos recebidos pelo ReyCart.
           </p>
         </div>
 
@@ -202,64 +347,96 @@ export default function IntegracoesPage() {
       ) : null}
 
       <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-bold text-slate-950">
                 Webhook Kiwify
               </h2>
 
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
-                Ativo
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${statusClass}`}
+              >
+                {statusLabel}
               </span>
             </div>
 
             <p className="mt-1 text-sm text-slate-500">
-              Use esta URL no painel de webhooks da Kiwify.
+              Use a URL final abaixo no campo URL do Webhook da Kiwify. Ela já
+              contém o token necessário para o ReyCart identificar sua empresa.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/configuracoes"
+              className="w-fit rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              Editar configuração
+            </Link>
+
+            <button
+              type="button"
+              onClick={copyFinalWebhookUrl}
+              disabled={!webhookFinalUrl}
+              className="w-fit rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {copiedFinalUrl ? "URL final copiada" : "Copiar URL final"}
+            </button>
+          </div>
+        </div>
+
+        <div
+          className={
+            webhookFinalUrl
+              ? "mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"
+              : "mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"
+          }
+        >
+          <p
+            className={
+              webhookFinalUrl
+                ? "break-all font-mono text-sm font-bold text-emerald-800"
+                : "break-all text-sm font-medium text-amber-800"
+            }
+          >
+            {webhookFinalUrl ||
+              "Token da Kiwify ainda não cadastrado. Vá em Configurações, salve o token e volte aqui para copiar a URL final."}
+          </p>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <InfoBox label="Método" value="POST" />
+
+          <InfoBox label="Plataforma" value="Kiwify" />
+
+          <InfoBox label="Validação" value="Token na URL" />
+
+          <InfoBox
+            label="Token salvo"
+            value={hasToken ? maskToken(tokenSalvo) : "Não"}
+          />
+        </div>
+
+        <details className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <summary className="cursor-pointer text-sm font-bold text-slate-700">
+            Ver URL base técnica
+          </summary>
+
+          <div className="mt-3 rounded-xl bg-white p-3">
+            <p className="break-all font-mono text-xs text-slate-600">
+              {webhookBaseUrl}
             </p>
           </div>
 
           <button
             type="button"
-            onClick={copyWebhookUrl}
-            className="w-fit rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+            onClick={copyBaseWebhookUrl}
+            className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
           >
-            {copied ? "URL copiada" : "Copiar URL"}
+            {copiedBaseUrl ? "URL base copiada" : "Copiar URL base"}
           </button>
-        </div>
-
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <p className="break-all font-mono text-sm text-slate-700">
-            {webhookUrl}
-          </p>
-        </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Método
-            </p>
-            <p className="mt-1 text-sm font-bold text-slate-950">POST</p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Evento principal
-            </p>
-            <p className="mt-1 text-sm font-bold text-slate-950">
-              Recuperação de vendas
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Status técnico
-            </p>
-            <p className="mt-1 text-sm font-bold text-emerald-700">
-              Rota publicada
-            </p>
-          </div>
-        </div>
+        </details>
       </div>
 
       <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -292,6 +469,23 @@ export default function IntegracoesPage() {
         />
       </div>
 
+      <div className="mb-8 grid gap-4 md:grid-cols-3">
+        <InfoBox
+          label="Status da integração"
+          value={statusLabel}
+        />
+
+        <InfoBox
+          label="Último evento da integração"
+          value={formatDate(data.integracao?.ultimo_evento_em || null)}
+        />
+
+        <InfoBox
+          label="Último status"
+          value={data.integracao?.ultimo_evento_status || "Não informado"}
+        />
+      </div>
+
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-2 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between">
           <div>
@@ -300,9 +494,17 @@ export default function IntegracoesPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Lista dos eventos mais recentes enviados pela Kiwify.
+              Lista dos eventos mais recentes enviados pela Kiwify para esta
+              empresa.
             </p>
           </div>
+
+          <Link
+            href="/configuracoes"
+            className="w-fit rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+          >
+            Ajustar token
+          </Link>
         </div>
 
         {loading ? (
