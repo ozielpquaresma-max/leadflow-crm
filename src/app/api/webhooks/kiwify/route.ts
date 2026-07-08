@@ -3,7 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const kiwifyWebhookSecret = process.env.KIWIFY_WEBHOOK_SECRET;
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error("Supabase não configurado.");
@@ -310,40 +309,6 @@ async function findKiwifyIntegration(receivedSecrets: string[]) {
   return data as IntegracaoKiwify | null;
 }
 
-async function findFallbackCompany(receivedSecrets: string[]) {
-  if (!kiwifyWebhookSecret) {
-    return null;
-  }
-
-  const authorizedByOldSecret = receivedSecrets.some(
-    (secret) => secret === kiwifyWebhookSecret
-  );
-
-  if (!authorizedByOldSecret) {
-    return null;
-  }
-
-  const { data, error } = await supabase
-    .from("empresas")
-    .select("id")
-    .eq("slug", "leadflow-crm")
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-
-  if (!data?.id) {
-    return null;
-  }
-
-  return {
-    empresaId: data.id as string,
-    integracaoId: null as string | null,
-    authMode: "fallback_env_secret",
-  };
-}
-
 async function resolveCompanyFromWebhook(receivedSecrets: string[]) {
   const integration = await findKiwifyIntegration(receivedSecrets);
 
@@ -355,7 +320,7 @@ async function resolveCompanyFromWebhook(receivedSecrets: string[]) {
     };
   }
 
-  return findFallbackCompany(receivedSecrets);
+  return null;
 }
 
 export async function POST(request: NextRequest) {
