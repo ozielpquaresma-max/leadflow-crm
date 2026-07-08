@@ -1,9 +1,10 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+"use client";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { RecoveryActions } from "@/features/recoveries/components/RecoveryActions";
+import { supabase } from "@/lib/supabase";
 
 type RecuperacaoVenda = {
   pedido_id: string;
@@ -45,12 +46,6 @@ type Interacao = {
   mensagem: string | null;
   resultado: string | null;
   created_at: string | null;
-};
-
-type PageProps = {
-  params: Promise<{
-    pedidoId: string;
-  }>;
 };
 
 function normalizeDateValue(value: string | null) {
@@ -243,36 +238,142 @@ function InfoItem({
   );
 }
 
-export default async function DetalheRecuperacaoPage({ params }: PageProps) {
-  const { pedidoId } = await params;
+export default function DetalheRecuperacaoPage() {
+  const params = useParams();
 
-  const { data, error } = await supabase
-    .from("vw_recuperacao_vendas")
-    .select("*")
-    .eq("pedido_id", pedidoId)
-    .maybeSingle();
+  const pedidoId = useMemo(() => {
+    const value = params?.pedidoId;
 
-  if (!data && !error) {
-    notFound();
+    if (Array.isArray(value)) {
+      return value[0] || "";
+    }
+
+    return value || "";
+  }, [params]);
+
+  const [venda, setVenda] = useState<RecuperacaoVenda | null>(null);
+  const [interacoes, setInteracoes] = useState<Interacao[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  async function loadDetalhes() {
+    setLoading(true);
+    setErrorMessage(null);
+
+    try {
+      if (!pedidoId) {
+        throw new Error("Pedido não informado.");
+      }
+
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw new Error(sessionError.message);
+      }
+
+      if (!session?.user) {
+        throw new Error("Sessão não encontrada.");
+      }
+
+      const { data: usuario, error: usuarioError } = await supabase
+        .from("usuarios")
+        .select("empresa_id")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle();
+
+      if (usuarioError) {
+        throw new Error(usuarioError.message);
+      }
+
+      const empresaId = usuario?.empresa_id as string | undefined;
+
+      if (!empresaId) {
+        throw new Error("Empresa vinculada à conta não encontrada.");
+      }
+
+      const { data: vendaData, error: vendaError } = await supabase
+        .from("vw_recuperacao_vendas")
+        .select("*")
+        .eq("pedido_id", pedidoId)
+        .eq("empresa_id", empresaId)
+        .maybeSingle();
+
+      if (vendaError) {
+        throw new Error(vendaError.message);
+      }
+
+      if (!vendaData) {
+        setVenda(null);
+        setInteracoes([]);
+        setErrorMessage(
+          "Oportunidade não encontrada ou não pertence à sua empresa."
+        );
+        return;
+      }
+
+      const { data: historico, error: historicoError } = await supabase
+        .from("interacoes")
+        .select("*")
+        .eq("pedido_id", pedidoId)
+        .eq("empresa_id", empresaId)
+        .order("created_at", { ascending: false });
+
+      if (historicoError) {
+        throw new Error(historicoError.message);
+      }
+
+      setVenda(vendaData as RecuperacaoVenda);
+      setInteracoes((historico || []) as Interacao[]);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao carregar oportunidade.";
+
+      setVenda(null);
+      setInteracoes([]);
+      setErrorMessage(message);
+      console.error("Erro ao carregar detalhes da oportunidade:", error);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const venda = data as RecuperacaoVenda | null;
+  useEffect(() => {
+    loadDetalhes();
+  }, [pedidoId]);
 
-  const { data: historico, error: historicoError } = await supabase
-    .from("interacoes")
-    .select("*")
-    .eq("pedido_id", pedidoId)
-    .order("created_at", { ascending: false });
-
-  const interacoes = (historico || []) as Interacao[];
+  if (loading) {
+    return (
+      <main className="h-[calc(100vh-73px)] overflow-y-auto bg-slate-50 p-6 pb-10 lg:p-8">
+        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
+          Carregando detalhes da oportunidade...
+        </div>
+      </main>
+    );
+  }
 
   if (!venda) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-        Não foi possível carregar esta oportunidade.
-      </div>
+      <main className="h-[calc(100vh-73px)] overflow-y-auto bg-slate-50 p-6 pb-10 lg:p-8">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+          {errorMessage || "Não foi possível carregar esta oportunidade."}
+        </div>
+
+        <Link
+          href="/recuperacao"
+          className="mt-4 inline-flex rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+        >
+          Voltar para recuperação
+        </Link>
+      </main>
     );
   }
+
+  const whatsappMessage = getWhatsAppMessage(venda);
 
   return (
     <main className="h-[calc(100vh-73px)] overflow-y-auto bg-slate-50 p-6 pb-10 lg:p-8">
@@ -314,16 +415,9 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
         </div>
       </div>
 
-      {error ? (
-        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-          Erro ao carregar oportunidade: {error.message}
-        </div>
-      ) : null}
-
-      {historicoError ? (
+      {errorMessage ? (
         <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-700">
-          Não foi possível carregar o histórico de interações:{" "}
-          {historicoError.message}
+          {errorMessage}
         </div>
       ) : null}
 
@@ -331,7 +425,10 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
         <InfoItem label="Cliente" value={venda.cliente_nome} />
         <InfoItem label="Produto" value={venda.produto_nome} />
         <InfoItem label="Valor" value={formatCurrency(venda.valor)} />
-        <InfoItem label="Pagamento" value={formatPagamento(venda.metodo_pagamento)} />
+        <InfoItem
+          label="Pagamento"
+          value={formatPagamento(venda.metodo_pagamento)}
+        />
       </div>
 
       <div className="mb-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -385,55 +482,41 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-950">
-            Ações rápidas
-          </h2>
+          <h2 className="text-lg font-bold text-slate-950">Ações rápidas</h2>
 
           <p className="mt-1 text-sm text-slate-500">
             Use os atalhos abaixo para recuperar a venda.
           </p>
 
-          <div className="mt-5 space-y-3">
-            <a
-              href={getWhatsAppLink(venda)}
-              target="_blank"
-              rel="noreferrer"
-              className={
-                venda.cliente_telefone
-                  ? "flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
-                  : "flex w-full cursor-not-allowed items-center justify-center rounded-xl bg-slate-300 px-4 py-3 text-sm font-bold text-white"
-              }
-            >
-              Chamar no WhatsApp
-            </a>
-
-            {venda.checkout_url ? (
-              <a
-                href={venda.checkout_url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
-              >
-                Abrir checkout
-              </a>
-            ) : (
-              <div className="flex w-full items-center justify-center rounded-xl bg-slate-200 px-4 py-3 text-sm font-bold text-slate-500">
-                Checkout não informado
-              </div>
-            )}
-
-            {venda.pix_copia_cola ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-                  PIX copia e cola
-                </p>
-
-                <p className="mt-2 max-h-28 overflow-auto break-all font-mono text-xs text-amber-900">
-                  {venda.pix_copia_cola}
-                </p>
-              </div>
-            ) : null}
+          <div className="mt-5">
+            <RecoveryActions
+              empresaId={venda.empresa_id}
+              clienteId={venda.cliente_id}
+              pedidoId={venda.pedido_id}
+              whatsappUrl={getWhatsAppLink(venda)}
+              whatsappMessage={whatsappMessage}
+              checkoutUrl={venda.checkout_url}
+              pixCode={venda.pix_copia_cola}
+              clienteNome={venda.cliente_nome}
+              clienteTelefone={venda.cliente_telefone}
+              produtoNome={venda.produto_nome}
+              status={venda.status}
+              valor={venda.valor}
+              statusRecuperacao={venda.status_recuperacao}
+            />
           </div>
+
+          {venda.pix_copia_cola ? (
+            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                PIX copia e cola
+              </p>
+
+              <p className="mt-2 max-h-28 overflow-auto break-all font-mono text-xs text-amber-900">
+                {venda.pix_copia_cola}
+              </p>
+            </div>
+          ) : null}
         </section>
       </div>
 
@@ -461,9 +544,7 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-950">
-            Recuperação
-          </h2>
+          <h2 className="text-lg font-bold text-slate-950">Recuperação</h2>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <InfoItem
