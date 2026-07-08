@@ -45,6 +45,15 @@ type PageProps = {
   }>;
 };
 
+function normalizeDateValue(value: string | null) {
+  if (!value) return null;
+
+  const hasTimezone =
+    value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
+
+  return hasTimezone ? value : `${value}Z`;
+}
+
 function formatCurrency(value: number | null) {
   if (!value) return "R$ 0,00";
 
@@ -75,13 +84,18 @@ function formatTempo(minutos: number | null) {
 function formatDataContato(data: string | null) {
   if (!data) return "Sem contato";
 
+  const normalizedValue = normalizeDateValue(data);
+
+  if (!normalizedValue) return "Sem contato";
+
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Belem",
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(data));
+  }).format(new Date(normalizedValue));
 }
 
 function formatResultado(resultado: string | null) {
