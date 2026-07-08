@@ -13,6 +13,14 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 type KiwifyPayload = Record<string, any>;
 
+type IntegracaoKiwify = {
+  id: string;
+  empresa_id: string;
+  plataforma: string;
+  token_plataforma: string | null;
+  status: string | null;
+};
+
 function getNestedValue(payload: KiwifyPayload, paths: string[]) {
   for (const path of paths) {
     const value = path.split(".").reduce<any>((acc, key) => {
@@ -34,12 +42,16 @@ function getNestedValue(payload: KiwifyPayload, paths: string[]) {
 function cleanToken(value: unknown) {
   if (!value) return null;
 
-  return String(value).replace(/^Bearer\s+/i, "").trim();
+  const token = String(value).replace(/^Bearer\s+/i, "").trim();
+
+  return token || null;
 }
 
 function getReceivedSecrets(request: NextRequest, payload: KiwifyPayload) {
-  return [
+  const values = [
     request.nextUrl.searchParams.get("signature"),
+    request.nextUrl.searchParams.get("token"),
+    request.nextUrl.searchParams.get("webhook_token"),
     request.headers.get("x-webhook-secret"),
     request.headers.get("x-kiwify-token"),
     request.headers.get("kiwify-token"),
@@ -58,9 +70,13 @@ function getReceivedSecrets(request: NextRequest, payload: KiwifyPayload) {
       "event.token",
       "event.signature",
     ]),
-  ]
+  ];
+
+  const cleaned = values
     .map(cleanToken)
-    .filter(Boolean);
+    .filter((token): token is string => Boolean(token));
+
+  return Array.from(new Set(cleaned));
 }
 
 function getKiwifyOrder(payload: KiwifyPayload) {
@@ -248,12 +264,14 @@ function toCurrencyFromKiwify(value: unknown) {
 }
 
 function slugify(value: string) {
-  return value
+  const slug = value
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+
+  return slug || "produto-kiwify";
 }
 
 function normalizeDate(value: unknown) {
@@ -272,58 +290,121 @@ function normalizeDate(value: unknown) {
   return raw;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    if (!kiwifyWebhookSecret) {
-      return NextResponse.json(
-        { ok: false, error: "Webhook secret não configurado." },
-        { status: 500 }
-      );
-    }
+async function findKiwifyIntegration(receivedSecrets: string[]) {
+  if (receivedSecrets.length === 0) {
+    return null;
+  }
 
+  const { data, error } = await supabase
+    .from("integracoes")
+    .select("id, empresa_id, plataforma, token_plataforma, status")
+    .eq("plataforma", "kiwify")
+    .in("token_plataforma", receivedSecrets)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as IntegracaoKiwify | null;
+}
+
+async function findFallbackCompany(receivedSecrets: string[]) {
+  if (!kiwifyWebhookSecret) {
+    return null;
+  }
+
+  const authorizedByOldSecret = receivedSecrets.some(
+    (secret) => secret === kiwifyWebhookSecret
+  );
+
+  if (!authorizedByOldSecret) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("empresas")
+    .select("id")
+    .eq("slug", "leadflow-crm")
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data?.id) {
+    return null;
+  }
+
+  return {
+    empresaId: data.id as string,
+    integracaoId: null as string | null,
+    authMode: "fallback_env_secret",
+  };
+}
+
+async function resolveCompanyFromWebhook(receivedSecrets: string[]) {
+  const integration = await findKiwifyIntegration(receivedSecrets);
+
+  if (integration?.empresa_id) {
+    return {
+      empresaId: integration.empresa_id,
+      integracaoId: integration.id,
+      authMode: "integracao_token",
+    };
+  }
+
+  return findFallbackCompany(receivedSecrets);
+}
+
+export async function POST(request: NextRequest) {
+  let webhookLogId: string | null = null;
+  let integracaoId: string | null = null;
+
+  try {
     const payload = (await request.json()) as KiwifyPayload;
     const order = getKiwifyOrder(payload);
+    const createdAt = new Date().toISOString();
 
     const receivedSecrets = getReceivedSecrets(request, payload);
 
-    const hasKiwifySignature = Boolean(
-      payload.signature || request.nextUrl.searchParams.get("signature")
-    );
+    const resolvedCompany = await resolveCompanyFromWebhook(receivedSecrets);
 
-    const authorized =
-      receivedSecrets.some((secret) => secret === kiwifyWebhookSecret) ||
-      hasKiwifySignature;
-
-    if (!authorized) {
+    if (!resolvedCompany?.empresaId) {
       return NextResponse.json(
         {
           ok: false,
-          error: "Webhook não autorizado.",
+          error:
+            "Webhook não autorizado. Token/signature da Kiwify não encontrado nas integrações do ReyCart.",
           receivedSecretFields: receivedSecrets.length,
-          hasSignature: hasKiwifySignature,
         },
         { status: 401 }
       );
     }
 
-    const { data: empresa } = await supabase
-      .from("empresas")
-      .select("id")
-      .eq("slug", "leadflow-crm")
-      .single();
+    integracaoId = resolvedCompany.integracaoId;
 
-    const { data: plataforma } = await supabase
+    const empresaId = resolvedCompany.empresaId;
+
+    const { data: plataforma, error: plataformaError } = await supabase
       .from("plataformas")
       .select("id")
       .eq("slug", "kiwify")
-      .single();
+      .maybeSingle();
 
-    if (!empresa?.id || !plataforma?.id) {
+    if (plataformaError) {
+      throw plataformaError;
+    }
+
+    if (!plataforma?.id) {
       return NextResponse.json(
-        { ok: false, error: "Empresa ou plataforma Kiwify não encontrada." },
+        { ok: false, error: "Plataforma Kiwify não encontrada." },
         { status: 500 }
       );
     }
+
+    const plataformaId = plataforma.id as string;
 
     const eventName =
       getNestedValue(payload, [
@@ -341,8 +422,8 @@ export async function POST(request: NextRequest) {
     const { data: webhookLog, error: webhookError } = await supabase
       .from("webhooks")
       .insert({
-        empresa_id: empresa.id,
-        plataforma_id: plataforma.id,
+        empresa_id: empresaId,
+        plataforma_id: plataformaId,
         evento: String(eventName),
         payload,
         processado: false,
@@ -353,6 +434,8 @@ export async function POST(request: NextRequest) {
     if (webhookError) {
       throw webhookError;
     }
+
+    webhookLogId = webhookLog.id as string;
 
     const customerName =
       getNestedValue(payload, [
@@ -377,7 +460,7 @@ export async function POST(request: NextRequest) {
       ]) ||
       "Cliente Kiwify";
 
-    const customerEmail =
+    const customerEmailRaw =
       getNestedValue(payload, [
         "order.Customer.email",
         "order.customer.email",
@@ -392,7 +475,9 @@ export async function POST(request: NextRequest) {
       getNestedValue(order, ["Customer.email", "customer.email"]) ||
       null;
 
-    const customerPhone =
+    const customerEmail = customerEmailRaw ? String(customerEmailRaw) : null;
+
+    const customerPhoneRaw =
       getNestedValue(payload, [
         "order.Customer.mobile",
         "order.Customer.phone",
@@ -416,7 +501,9 @@ export async function POST(request: NextRequest) {
       ]) ||
       null;
 
-    const customerCity =
+    const customerPhone = customerPhoneRaw ? String(customerPhoneRaw) : null;
+
+    const customerCityRaw =
       getNestedValue(payload, [
         "order.Customer.address.city",
         "order.customer.address.city",
@@ -426,7 +513,9 @@ export async function POST(request: NextRequest) {
         "city",
       ]) || null;
 
-    const customerState =
+    const customerCity = customerCityRaw ? String(customerCityRaw) : null;
+
+    const customerStateRaw =
       getNestedValue(payload, [
         "order.Customer.address.state",
         "order.customer.address.state",
@@ -436,22 +525,24 @@ export async function POST(request: NextRequest) {
         "state",
       ]) || null;
 
+    const customerState = customerStateRaw ? String(customerStateRaw) : null;
+
     const { data: existingCustomer } = customerEmail
       ? await supabase
           .from("clientes")
           .select("id")
-          .eq("empresa_id", empresa.id)
+          .eq("empresa_id", empresaId)
           .eq("email", customerEmail)
           .maybeSingle()
       : { data: null };
 
-    let clienteId = existingCustomer?.id;
+    let clienteId = existingCustomer?.id as string | undefined;
 
     if (!clienteId) {
       const { data: createdCustomer, error: customerError } = await supabase
         .from("clientes")
         .insert({
-          empresa_id: empresa.id,
+          empresa_id: empresaId,
           nome: String(customerName),
           email: customerEmail,
           telefone: customerPhone,
@@ -466,7 +557,7 @@ export async function POST(request: NextRequest) {
         throw customerError;
       }
 
-      clienteId = createdCustomer.id;
+      clienteId = createdCustomer.id as string;
     }
 
     const productName =
@@ -543,18 +634,18 @@ export async function POST(request: NextRequest) {
     const { data: existingProduct } = await supabase
       .from("produtos")
       .select("id")
-      .eq("empresa_id", empresa.id)
+      .eq("empresa_id", empresaId)
       .eq("slug", productSlug)
       .maybeSingle();
 
-    let produtoId = existingProduct?.id;
+    let produtoId = existingProduct?.id as string | undefined;
 
     if (!produtoId) {
       const { data: createdProduct, error: productError } = await supabase
         .from("produtos")
         .insert({
-          empresa_id: empresa.id,
-          plataforma_id: plataforma.id,
+          empresa_id: empresaId,
+          plataforma_id: plataformaId,
           nome: String(productName),
           slug: productSlug,
           valor: productValue,
@@ -568,7 +659,7 @@ export async function POST(request: NextRequest) {
         throw productError;
       }
 
-      produtoId = createdProduct.id;
+      produtoId = createdProduct.id as string;
     }
 
     const externalOrderId = String(
@@ -627,8 +718,6 @@ export async function POST(request: NextRequest) {
       ]) ||
       null;
 
-    const createdAt = new Date().toISOString();
-
     const paidAt =
       status === "pago"
         ? normalizeDate(
@@ -648,7 +737,7 @@ export async function POST(request: NextRequest) {
     const { data: existingOrder } = await supabase
       .from("pedidos")
       .select("id")
-      .eq("empresa_id", empresa.id)
+      .eq("empresa_id", empresaId)
       .eq("pedido_externo_id", externalOrderId)
       .maybeSingle();
 
@@ -658,7 +747,7 @@ export async function POST(request: NextRequest) {
         .update({
           cliente_id: clienteId,
           produto_id: produtoId,
-          plataforma_id: plataforma.id,
+          plataforma_id: plataformaId,
           status,
           metodo_pagamento: paymentMethod,
           valor: productValue,
@@ -675,10 +764,10 @@ export async function POST(request: NextRequest) {
       }
     } else {
       const { error: orderError } = await supabase.from("pedidos").insert({
-        empresa_id: empresa.id,
+        empresa_id: empresaId,
         cliente_id: clienteId,
         produto_id: produtoId,
-        plataforma_id: plataforma.id,
+        plataforma_id: plataformaId,
         pedido_externo_id: externalOrderId,
         status,
         metodo_pagamento: paymentMethod,
@@ -698,7 +787,19 @@ export async function POST(request: NextRequest) {
     await supabase
       .from("webhooks")
       .update({ processado: true })
-      .eq("id", webhookLog.id);
+      .eq("id", webhookLogId);
+
+    if (integracaoId) {
+      await supabase
+        .from("integracoes")
+        .update({
+          status: "ativo",
+          ultimo_evento_em: createdAt,
+          ultimo_evento_status: "processado",
+          updated_at: createdAt,
+        })
+        .eq("id", integracaoId);
+    }
 
     return NextResponse.json({
       ok: true,
@@ -707,9 +808,28 @@ export async function POST(request: NextRequest) {
       status,
       paymentMethod,
       externalOrderId,
+      authMode: resolvedCompany.authMode,
     });
   } catch (error) {
     console.error("Erro no webhook Kiwify:", error);
+
+    if (webhookLogId) {
+      await supabase
+        .from("webhooks")
+        .update({ processado: false })
+        .eq("id", webhookLogId);
+    }
+
+    if (integracaoId) {
+      await supabase
+        .from("integracoes")
+        .update({
+          status: "erro",
+          ultimo_evento_status: "erro",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", integracaoId);
+    }
 
     return NextResponse.json(
       {
