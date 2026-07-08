@@ -114,6 +114,18 @@ function getModeloLabel(tipo: string | null) {
   return labels[tipo] || tipo;
 }
 
+function formatStatusIntegracao(status: string | null | undefined) {
+  if (!status) return "Pendente";
+
+  const labels: Record<string, string> = {
+    ativo: "Ativa",
+    pendente: "Pendente",
+    erro: "Com erro",
+  };
+
+  return labels[status] || status;
+}
+
 function maskToken(token: string | null) {
   if (!token) return "Token não cadastrado";
 
@@ -137,7 +149,7 @@ function ConfigCard({
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-5">
         <h2 className="text-lg font-bold text-slate-950">{title}</h2>
-        <p className="mt-1 text-sm text-slate-500">{description}</p>
+        <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
       </div>
 
       {children}
@@ -196,6 +208,8 @@ export default function ConfiguracoesPage() {
 
   const webhookBaseUrl = `${appUrl}/api/webhooks/kiwify`;
   const tokenSalvo = data.integracao?.token_plataforma || "";
+  const tokenCadastrado = Boolean(tokenSalvo);
+
   const webhookFinalUrl = tokenSalvo
     ? `${webhookBaseUrl}?token=${encodeURIComponent(tokenSalvo)}`
     : "";
@@ -446,7 +460,7 @@ export default function ConfiguracoesPage() {
       }));
 
       setSuccessMessage(
-        "Token da Kiwify salvo. Agora copie a URL final e cole no webhook da Kiwify."
+        "Token salvo com sucesso. Agora copie a URL final e cole no webhook da Kiwify."
       );
     } catch (error) {
       const message =
@@ -474,8 +488,8 @@ export default function ConfiguracoesPage() {
           </h1>
 
           <p className="mt-2 max-w-4xl text-slate-600">
-            Configure sua conta, conecte sua plataforma de venda e acompanhe os
-            eventos recebidos pelo ReyCart.
+            Configure sua conta, prepare os modelos de recuperação e conecte uma
+            plataforma de venda disponível.
           </p>
         </div>
 
@@ -544,24 +558,32 @@ export default function ConfiguracoesPage() {
           </ConfigCard>
 
           <ConfigCard
-            title="Integração com Kiwify"
-            description="Copie o token da Kiwify, salve no ReyCart e use a URL final gerada automaticamente."
+            title="Integração disponível: Kiwify"
+            description="No momento, o ReyCart possui conexão disponível com a Kiwify. Para ativar, salve o token da Kiwify e use a URL final gerada pelo sistema."
           >
             <div className="space-y-5">
               <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
                 <p className="text-sm font-bold text-blue-950">
-                  Passo a passo correto
+                  Como ativar a integração
                 </p>
 
                 <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-blue-700">
                   <li>Na Kiwify, vá em Webhooks e crie ou edite um webhook.</li>
-                  <li>Copie o campo Token que já aparece na Kiwify.</li>
+                  <li>Copie o campo Token que aparece na tela da Kiwify.</li>
                   <li>Cole esse token no ReyCart e clique em Salvar token.</li>
                   <li>Copie a URL final gerada pelo ReyCart.</li>
-                  <li>Cole a URL final no campo URL do Webhook da Kiwify.</li>
+                  <li>Cole a URL final no campo URL do webhook da Kiwify.</li>
                   <li>Salve na Kiwify e faça o teste do webhook.</li>
                 </ol>
               </div>
+
+              {!tokenCadastrado ? (
+                <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-700">
+                  A integração ainda não está ativa porque nenhum token foi
+                  salvo. Depois que o token for cadastrado, o ReyCart libera a
+                  URL final para conectar o webhook.
+                </div>
+              ) : null}
 
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -572,7 +594,7 @@ export default function ConfiguracoesPage() {
                   value={tokenInput}
                   onChange={(event) => setTokenInput(event.target.value)}
                   type={showToken ? "text" : "password"}
-                  placeholder="Cole aqui o token curto que aparece na Kiwify"
+                  placeholder="Cole aqui o token exibido no webhook da Kiwify"
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 font-mono text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
                 />
 
@@ -669,7 +691,7 @@ export default function ConfiguracoesPage() {
 
                 <InfoBox
                   label="Status"
-                  value={data.integracao?.status || "pendente"}
+                  value={formatStatusIntegracao(data.integracao?.status)}
                 />
               </div>
 
@@ -683,7 +705,7 @@ export default function ConfiguracoesPage() {
 
           <ConfigCard
             title="Status da integração"
-            description="Resumo dos últimos eventos recebidos pela sua conta."
+            description="Resumo dos eventos recebidos exclusivamente pela sua empresa."
           >
             <div className="grid gap-3 md:grid-cols-3">
               <InfoBox label="Total de eventos" value={totalWebhooks} />
@@ -732,8 +754,8 @@ export default function ConfiguracoesPage() {
           </ConfigCard>
 
           <ConfigCard
-            title="Mensagens de recuperação"
-            description="Modelos usados para chamar clientes pelo WhatsApp."
+            title="Modelos padrão de recuperação"
+            description="Estes modelos são criados automaticamente para sua empresa. Você pode editar os textos antes de usar no WhatsApp."
           >
             <div className="grid gap-3 md:grid-cols-2">
               <InfoBox label="Modelos cadastrados" value={data.modelos.length} />
@@ -752,7 +774,7 @@ export default function ConfiguracoesPage() {
                     </p>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Atualizado em {formatDate(modelo.updated_at)}
+                      Modelo padrão da sua empresa
                     </p>
                   </div>
 
@@ -770,7 +792,8 @@ export default function ConfiguracoesPage() {
 
               {data.modelos.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
-                  Nenhum modelo de mensagem encontrado.
+                  Nenhum modelo encontrado. Abra a tela de Automações para criar
+                  os modelos padrão da empresa.
                 </div>
               ) : null}
             </div>
