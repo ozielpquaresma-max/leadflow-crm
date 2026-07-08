@@ -27,22 +27,43 @@ type Integracao = {
   updated_at: string | null;
 };
 
+type IntegrationMetrics = {
+  totalWebhooks: number;
+  processados: number;
+  comErro: number;
+};
+
 type IntegrationStatus = {
   empresaId: string | null;
   integracao: Integracao | null;
   logs: WebhookLog[];
+  metrics: IntegrationMetrics;
 };
+
+function normalizeDateValue(value: string | null) {
+  if (!value) return null;
+
+  const hasTimezone =
+    value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
+
+  return hasTimezone ? value : `${value}Z`;
+}
 
 function formatDate(value: string | null) {
   if (!value) return "Não informado";
 
+  const normalizedValue = normalizeDateValue(value);
+
+  if (!normalizedValue) return "Não informado";
+
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Belem",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(new Date(normalizedValue));
 }
 
 function getEventLabel(evento: string | null) {
@@ -157,6 +178,11 @@ export default function IntegracoesPage() {
     empresaId: null,
     integracao: null,
     logs: [],
+    metrics: {
+      totalWebhooks: 0,
+      processados: 0,
+      comErro: 0,
+    },
   });
 
   const [loading, setLoading] = useState(true);
@@ -178,9 +204,9 @@ export default function IntegracoesPage() {
     : "";
 
   const hasToken = Boolean(tokenSalvo);
-  const totalWebhooks = data.logs.length;
-  const processados = data.logs.filter((log) => log.processado === true).length;
-  const comErro = data.logs.filter((log) => log.processado === false).length;
+  const totalWebhooks = data.metrics.totalWebhooks;
+  const processados = data.metrics.processados;
+  const comErro = data.metrics.comErro;
   const ultimoWebhook = data.logs[0] || null;
 
   const statusLabel = getStatusLabel(data.integracao?.status || null, hasToken);
@@ -259,23 +285,64 @@ export default function IntegracoesPage() {
         integracao = novaIntegracao as Integracao;
       }
 
-      const { data: logs, error: logsError } = await supabase
-        .from("webhooks")
-        .select(
-          "id, empresa_id, plataforma_id, evento, processado, payload, created_at"
-        )
-        .eq("empresa_id", empresaId)
-        .order("created_at", { ascending: false })
-        .limit(20);
+      const [
+        totalWebhooksResult,
+        processadosResult,
+        comErroResult,
+        logsResult,
+      ] = await Promise.all([
+        supabase
+          .from("webhooks")
+          .select("id", { count: "exact", head: true })
+          .eq("empresa_id", empresaId),
 
-      if (logsError) {
-        throw new Error(logsError.message);
+        supabase
+          .from("webhooks")
+          .select("id", { count: "exact", head: true })
+          .eq("empresa_id", empresaId)
+          .eq("processado", true),
+
+        supabase
+          .from("webhooks")
+          .select("id", { count: "exact", head: true })
+          .eq("empresa_id", empresaId)
+          .eq("processado", false),
+
+        supabase
+          .from("webhooks")
+          .select(
+            "id, empresa_id, plataforma_id, evento, processado, payload, created_at"
+          )
+          .eq("empresa_id", empresaId)
+          .order("created_at", { ascending: false })
+          .limit(20),
+      ]);
+
+      if (totalWebhooksResult.error) {
+        throw new Error(totalWebhooksResult.error.message);
+      }
+
+      if (processadosResult.error) {
+        throw new Error(processadosResult.error.message);
+      }
+
+      if (comErroResult.error) {
+        throw new Error(comErroResult.error.message);
+      }
+
+      if (logsResult.error) {
+        throw new Error(logsResult.error.message);
       }
 
       setData({
         empresaId,
         integracao,
-        logs: (logs || []) as WebhookLog[],
+        logs: (logsResult.data || []) as WebhookLog[],
+        metrics: {
+          totalWebhooks: totalWebhooksResult.count || 0,
+          processados: processadosResult.count || 0,
+          comErro: comErroResult.count || 0,
+        },
       });
     } catch (error) {
       const message =
@@ -443,19 +510,19 @@ export default function IntegracoesPage() {
         <MetricCard
           title="Webhooks recebidos"
           value={totalWebhooks}
-          helper="Últimos 20 eventos carregados"
+          helper="Total real recebido pela empresa"
         />
 
         <MetricCard
           title="Processados"
           value={processados}
-          helper="Eventos salvos e tratados"
+          helper="Total real processado com sucesso"
         />
 
         <MetricCard
           title="Com erro"
           value={comErro}
-          helper="Eventos recebidos sem processamento concluído"
+          helper="Total real sem processamento concluído"
         />
 
         <MetricCard
@@ -470,10 +537,7 @@ export default function IntegracoesPage() {
       </div>
 
       <div className="mb-8 grid gap-4 md:grid-cols-3">
-        <InfoBox
-          label="Status da integração"
-          value={statusLabel}
-        />
+        <InfoBox label="Status da integração" value={statusLabel} />
 
         <InfoBox
           label="Último evento da integração"
@@ -494,7 +558,7 @@ export default function IntegracoesPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Lista dos eventos mais recentes enviados pela Kiwify para esta
+              Lista dos 20 eventos mais recentes enviados pela Kiwify para esta
               empresa.
             </p>
           </div>
