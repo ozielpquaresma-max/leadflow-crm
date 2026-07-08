@@ -37,6 +37,32 @@ type WebhookLog = {
   created_at: string | null;
 };
 
+function normalizeDateValue(value: string | null) {
+  if (!value) return null;
+
+  const hasTimezone =
+    value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
+
+  return hasTimezone ? value : `${value}Z`;
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "Não informado";
+
+  const normalizedValue = normalizeDateValue(value);
+
+  if (!normalizedValue) return "Não informado";
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Belem",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(normalizedValue));
+}
+
 function formatCurrency(value: number | null | undefined) {
   const amount = Number(value || 0);
 
@@ -44,17 +70,6 @@ function formatCurrency(value: number | null | undefined) {
     style: "currency",
     currency: "BRL",
   }).format(amount);
-}
-
-function formatDate(value: string | null) {
-  if (!value) return "Não informado";
-
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
 }
 
 function formatTempo(minutos: number | null) {
@@ -248,7 +263,7 @@ export default async function DashboardPage() {
 
   const { count: totalWebhooksCount } = await supabase
     .from("webhooks")
-    .select("*", { count: "exact", head: true });
+    .select("id", { count: "exact", head: true });
 
   const vendas = (vendasData || []) as DashboardVenda[];
   const webhooks = (webhooksData || []) as WebhookLog[];
@@ -352,7 +367,9 @@ export default async function DashboardPage() {
         <MetricCard
           title="Taxa de recuperação"
           value={`${taxaRecuperacao}%`}
-          helper={`${convertidos} convertido${convertidos === 1 ? "" : "s"} de ${totalOportunidades}`}
+          helper={`${convertidos} convertido${
+            convertidos === 1 ? "" : "s"
+          } de ${totalOportunidades}`}
         />
 
         <MetricCard
@@ -578,7 +595,9 @@ export default async function DashboardPage() {
                   : "Nenhum evento"}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {ultimoWebhook ? formatDate(ultimoWebhook.created_at) : "Sem dados"}
+                {ultimoWebhook
+                  ? formatDate(ultimoWebhook.created_at)
+                  : "Sem dados"}
               </p>
             </div>
           </div>
