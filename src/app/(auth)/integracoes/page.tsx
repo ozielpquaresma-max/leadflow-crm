@@ -76,7 +76,7 @@ function getEventLabel(evento: string | null) {
     checkout_abandoned: "Checkout abandonado",
     order_rejected: "Compra recusada",
     order_approved: "Compra aprovada",
-    kiwify_event: "Evento Kiwify",
+    kiwify_event: "Evento recebido",
     pix_pendente: "PIX pendente",
     checkout_abandonado: "Checkout abandonado",
     cartao_recusado: "Cartão recusado",
@@ -114,13 +114,13 @@ function getStatusLabel(status: string | null, hasToken: boolean) {
   if (!hasToken) return "Pendente";
 
   const labels: Record<string, string> = {
-    ativo: "Ativo",
+    ativo: "Ativa",
     pendente: "Pendente",
-    erro: "Erro",
-    inativo: "Inativo",
+    erro: "Com erro",
+    inativo: "Inativa",
   };
 
-  return labels[status || ""] || "Ativo";
+  return labels[status || ""] || "Ativa";
 }
 
 function getStatusClass(status: string | null, hasToken: boolean) {
@@ -392,8 +392,8 @@ export default function IntegracoesPage() {
           </h1>
 
           <p className="mt-2 max-w-3xl text-slate-600">
-            Acompanhe a conexão com a Kiwify, veja a URL final do webhook e
-            monitore os eventos recebidos pelo ReyCart.
+            Conecte uma plataforma disponível ao ReyCart e acompanhe os eventos
+            recebidos pela sua empresa.
           </p>
         </div>
 
@@ -418,7 +418,7 @@ export default function IntegracoesPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-bold text-slate-950">
-                Webhook Kiwify
+                Integração disponível: Kiwify
               </h2>
 
               <span
@@ -428,9 +428,10 @@ export default function IntegracoesPage() {
               </span>
             </div>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Use a URL final abaixo no campo URL do Webhook da Kiwify. Ela já
-              contém o token necessário para o ReyCart identificar sua empresa.
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              No momento, o ReyCart possui conexão disponível com a Kiwify. Para
+              ativar, salve o token da Kiwify em Configurações e depois copie a
+              URL final gerada automaticamente.
             </p>
           </div>
 
@@ -439,7 +440,7 @@ export default function IntegracoesPage() {
               href="/configuracoes"
               className="w-fit rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
             >
-              Editar configuração
+              Configurar token
             </Link>
 
             <button
@@ -453,22 +454,30 @@ export default function IntegracoesPage() {
           </div>
         </div>
 
+        {!hasToken ? (
+          <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-700">
+            Esta integração ainda está pendente porque nenhum token foi salvo.
+            A URL final ficará disponível depois que o token da Kiwify for
+            cadastrado em Configurações.
+          </div>
+        ) : null}
+
         <div
           className={
             webhookFinalUrl
               ? "mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"
-              : "mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4"
+              : "mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4"
           }
         >
           <p
             className={
               webhookFinalUrl
                 ? "break-all font-mono text-sm font-bold text-emerald-800"
-                : "break-all text-sm font-medium text-amber-800"
+                : "break-all text-sm font-medium text-slate-500"
             }
           >
             {webhookFinalUrl ||
-              "Token da Kiwify ainda não cadastrado. Vá em Configurações, salve o token e volte aqui para copiar a URL final."}
+              "Salve primeiro o token da Kiwify para gerar a URL final do webhook."}
           </p>
         </div>
 
@@ -481,7 +490,7 @@ export default function IntegracoesPage() {
 
           <InfoBox
             label="Token salvo"
-            value={hasToken ? maskToken(tokenSalvo) : "Não"}
+            value={hasToken ? maskToken(tokenSalvo) : "Não cadastrado"}
           />
         </div>
 
@@ -508,21 +517,21 @@ export default function IntegracoesPage() {
 
       <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="Webhooks recebidos"
+          title="Eventos recebidos"
           value={totalWebhooks}
-          helper="Total real recebido pela empresa"
+          helper="Total recebido pela sua empresa"
         />
 
         <MetricCard
           title="Processados"
           value={processados}
-          helper="Total real processado com sucesso"
+          helper="Eventos processados com sucesso"
         />
 
         <MetricCard
           title="Com erro"
           value={comErro}
-          helper="Total real sem processamento concluído"
+          helper="Eventos que precisam de atenção"
         />
 
         <MetricCard
@@ -554,12 +563,11 @@ export default function IntegracoesPage() {
         <div className="flex flex-col gap-2 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-950">
-              Últimos webhooks recebidos
+              Últimos eventos recebidos
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Lista dos 20 eventos mais recentes enviados pela Kiwify para esta
-              empresa.
+              Lista dos 20 eventos mais recentes recebidos para esta empresa.
             </p>
           </div>
 
@@ -577,7 +585,8 @@ export default function IntegracoesPage() {
           </div>
         ) : data.logs.length === 0 ? (
           <div className="p-10 text-center text-sm text-slate-500">
-            Nenhum webhook recebido ainda.
+            Nenhum evento recebido ainda. Depois que a integração for ativada e
+            testada na Kiwify, os eventos aparecerão aqui.
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
