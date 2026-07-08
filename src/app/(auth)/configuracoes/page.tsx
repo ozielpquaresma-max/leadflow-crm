@@ -9,11 +9,20 @@ type Empresa = {
   nome: string | null;
   email: string | null;
   telefone: string | null;
-  cnpj_cpf: string | null;
-  documento?: string | null;
   status: string | null;
-  webhook_secret: string | null;
-  webhook_secret_updated_at: string | null;
+};
+
+type Integracao = {
+  id: string;
+  empresa_id: string;
+  plataforma: string;
+  nome: string;
+  token_plataforma: string | null;
+  tipo_token: string;
+  status: string;
+  ultimo_evento_em: string | null;
+  ultimo_evento_status: string | null;
+  updated_at: string | null;
 };
 
 type WebhookLog = {
@@ -32,6 +41,7 @@ type ModeloMensagem = {
 
 type ConfiguracoesData = {
   empresa: Empresa | null;
+  integracao: Integracao | null;
   webhooks: WebhookLog[];
   modelos: ModeloMensagem[];
 };
@@ -83,14 +93,14 @@ function getModeloLabel(tipo: string | null) {
   return labels[tipo] || tipo;
 }
 
-function maskSecret(secret: string | null) {
-  if (!secret) return "Chave não encontrada";
+function maskToken(token: string | null) {
+  if (!token) return "Token não cadastrado";
 
-  if (secret.length <= 12) {
+  if (token.length <= 12) {
     return "••••••••";
   }
 
-  return `${secret.slice(0, 6)}${"•".repeat(18)}${secret.slice(-6)}`;
+  return `${token.slice(0, 6)}${"•".repeat(18)}${token.slice(-6)}`;
 }
 
 function ConfigCard({
@@ -137,14 +147,17 @@ function InfoBox({
 export default function ConfiguracoesPage() {
   const [data, setData] = useState<ConfiguracoesData>({
     empresa: null,
+    integracao: null,
     webhooks: [],
     modelos: [],
   });
 
   const [loading, setLoading] = useState(true);
-  const [showSecret, setShowSecret] = useState(false);
+  const [savingToken, setSavingToken] = useState(false);
+  const [showToken, setShowToken] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
   const [copiedWebhook, setCopiedWebhook] = useState(false);
-  const [copiedSecret, setCopiedSecret] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const appUrl = useMemo(() => {
@@ -155,7 +168,6 @@ export default function ConfiguracoesPage() {
   }, []);
 
   const webhookUrl = `${appUrl}/api/webhooks/kiwify`;
-  const webhookSecret = data.empresa?.webhook_secret || "";
 
   const totalWebhooks = data.webhooks.length;
   const webhooksProcessados = data.webhooks.filter(
@@ -170,9 +182,12 @@ export default function ConfiguracoesPage() {
     (modelo) => modelo.ativo === true
   ).length;
 
+  const tokenSalvo = data.integracao?.token_plataforma || "";
+
   async function loadConfiguracoes() {
     setLoading(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
 
     try {
       const {
@@ -206,14 +221,51 @@ export default function ConfiguracoesPage() {
 
       const { data: empresa, error: empresaError } = await supabase
         .from("empresas")
-        .select(
-          "id, nome, email, telefone, cnpj_cpf, documento, status, webhook_secret, webhook_secret_updated_at"
-        )
+        .select("id, nome, email, telefone, status")
         .eq("id", empresaId)
         .maybeSingle();
 
       if (empresaError) {
         throw new Error(empresaError.message);
+      }
+
+      const { data: integracaoExistente, error: integracaoError } =
+        await supabase
+          .from("integracoes")
+          .select(
+            "id, empresa_id, plataforma, nome, token_plataforma, tipo_token, status, ultimo_evento_em, ultimo_evento_status, updated_at"
+          )
+          .eq("empresa_id", empresaId)
+          .eq("plataforma", "kiwify")
+          .maybeSingle();
+
+      if (integracaoError) {
+        throw new Error(integracaoError.message);
+      }
+
+      let integracao = integracaoExistente as Integracao | null;
+
+      if (!integracao) {
+        const { data: novaIntegracao, error: novaIntegracaoError } =
+          await supabase
+            .from("integracoes")
+            .insert({
+              empresa_id: empresaId,
+              plataforma: "kiwify",
+              nome: "Kiwify",
+              tipo_token: "query_signature",
+              status: "pendente",
+            })
+            .select(
+              "id, empresa_id, plataforma, nome, token_plataforma, tipo_token, status, ultimo_evento_em, ultimo_evento_status, updated_at"
+            )
+            .single();
+
+        if (novaIntegracaoError) {
+          throw new Error(novaIntegracaoError.message);
+        }
+
+        integracao = novaIntegracao as Integracao;
       }
 
       const { data: webhooks, error: webhooksError } = await supabase
@@ -239,9 +291,12 @@ export default function ConfiguracoesPage() {
 
       setData({
         empresa: empresa as Empresa,
+        integracao,
         webhooks: (webhooks || []) as WebhookLog[],
         modelos: (modelos || []) as ModeloMensagem[],
       });
+
+      setTokenInput(integracao?.token_plataforma || "");
     } catch (error) {
       const message =
         error instanceof Error
@@ -265,16 +320,58 @@ export default function ConfiguracoesPage() {
     }, 2000);
   }
 
-  async function copyWebhookSecret() {
-    if (!webhookSecret) return;
+  async function saveToken() {
+    setSavingToken(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
 
-    await navigator.clipboard.writeText(webhookSecret);
+    try {
+      if (!data.empresa?.id) {
+        throw new Error("Empresa não encontrada.");
+      }
 
-    setCopiedSecret(true);
+      const tokenLimpo = tokenInput.trim();
 
-    setTimeout(() => {
-      setCopiedSecret(false);
-    }, 2000);
+      const { data: integracaoAtualizada, error } = await supabase
+        .from("integracoes")
+        .upsert(
+          {
+            empresa_id: data.empresa.id,
+            plataforma: "kiwify",
+            nome: "Kiwify",
+            token_plataforma: tokenLimpo || null,
+            tipo_token: "query_signature",
+            status: tokenLimpo ? "ativo" : "pendente",
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "empresa_id,plataforma",
+          }
+        )
+        .select(
+          "id, empresa_id, plataforma, nome, token_plataforma, tipo_token, status, ultimo_evento_em, ultimo_evento_status, updated_at"
+        )
+        .single();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setData((current) => ({
+        ...current,
+        integracao: integracaoAtualizada as Integracao,
+      }));
+
+      setSuccessMessage("Token da Kiwify salvo com sucesso.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao salvar token.";
+
+      setErrorMessage(message);
+      console.error("Erro ao salvar token:", error);
+    } finally {
+      setSavingToken(false);
+    }
   }
 
   useEffect(() => {
@@ -292,8 +389,8 @@ export default function ConfiguracoesPage() {
           </h1>
 
           <p className="mt-2 max-w-4xl text-slate-600">
-            Gerencie os principais ajustes da sua conta, integração de vendas e
-            mensagens de recuperação.
+            Configure sua conta, conecte sua plataforma de venda e acompanhe os
+            eventos recebidos pelo ReyCart.
           </p>
         </div>
 
@@ -309,7 +406,13 @@ export default function ConfiguracoesPage() {
 
       {errorMessage ? (
         <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-          Erro ao carregar configurações: {errorMessage}
+          {errorMessage}
+        </div>
+      ) : null}
+
+      {successMessage ? (
+        <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-700">
+          {successMessage}
         </div>
       ) : null}
 
@@ -335,12 +438,8 @@ export default function ConfiguracoesPage() {
               />
 
               <InfoBox
-                label="Documento"
-                value={
-                  data.empresa?.cnpj_cpf ||
-                  data.empresa?.documento ||
-                  "Não informado"
-                }
+                label="E-mail"
+                value={data.empresa?.email || "Não informado"}
               />
 
               <InfoBox
@@ -360,10 +459,24 @@ export default function ConfiguracoesPage() {
           </ConfigCard>
 
           <ConfigCard
-            title="Integração da plataforma"
-            description="Use a URL do webhook e a chave secreta para conectar sua plataforma de venda ao ReyCart."
+            title="Integração com Kiwify"
+            description="Copie a URL do webhook, cadastre na Kiwify e salve aqui o token/signature gerado pela plataforma."
           >
-            <div className="space-y-4">
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <p className="text-sm font-bold text-blue-950">
+                  Passo a passo
+                </p>
+
+                <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-blue-700">
+                  <li>Copie a URL do webhook abaixo.</li>
+                  <li>Cadastre essa URL na área de webhooks da Kiwify.</li>
+                  <li>Copie o token/signature mostrado pela Kiwify.</li>
+                  <li>Cole o token no campo abaixo e salve.</li>
+                  <li>Depois faça um teste de evento na Kiwify.</li>
+                </ol>
+              </div>
+
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                   URL do webhook
@@ -374,65 +487,78 @@ export default function ConfiguracoesPage() {
                     {webhookUrl}
                   </p>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={copyWebhookUrl}
+                  className="mt-3 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  {copiedWebhook ? "URL copiada" : "Copiar URL"}
+                </button>
               </div>
 
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Chave secreta de integração
+                  Token/signature da Kiwify
                 </p>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="break-all font-mono text-sm text-slate-700">
-                    {showSecret ? webhookSecret : maskSecret(webhookSecret)}
+                <input
+                  value={showToken ? tokenInput : tokenInput}
+                  onChange={(event) => setTokenInput(event.target.value)}
+                  type={showToken ? "text" : "password"}
+                  placeholder="Cole aqui o token/signature gerado pela Kiwify"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 font-mono text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
+                />
+
+                <div className="mt-2 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Token salvo atualmente
+                  </p>
+
+                  <p className="mt-1 break-all font-mono text-sm font-bold text-slate-950">
+                    {showToken ? tokenSalvo || "Token não cadastrado" : maskToken(tokenSalvo)}
                   </p>
                 </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={saveToken}
+                    disabled={savingToken}
+                    className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {savingToken ? "Salvando..." : "Salvar token"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowToken((current) => !current)}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    {showToken ? "Ocultar token" : "Mostrar token"}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={copyWebhookUrl}
-                className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
-              >
-                {copiedWebhook ? "URL copiada" : "Copiar URL"}
-              </button>
+              <div className="grid gap-3 md:grid-cols-3">
+                <InfoBox label="Plataforma" value="Kiwify" />
 
-              <button
-                type="button"
-                onClick={copyWebhookSecret}
-                disabled={!webhookSecret}
-                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                {copiedSecret ? "Chave copiada" : "Copiar chave"}
-              </button>
+                <InfoBox
+                  label="Tipo de validação"
+                  value="signature na URL"
+                />
 
-              <button
-                type="button"
-                onClick={() => setShowSecret((current) => !current)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-              >
-                {showSecret ? "Ocultar chave" : "Mostrar chave"}
-              </button>
-            </div>
+                <InfoBox
+                  label="Status"
+                  value={data.integracao?.status || "pendente"}
+                />
+              </div>
 
-            <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-700">
-              Use essa chave somente dentro da sua plataforma de venda. Não
-              compartilhe publicamente. Ela identifica os eventos enviados para
-              a sua conta ReyCart.
-            </div>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
-              <InfoBox label="Método" value="POST" />
-
-              <InfoBox label="Status" value="Ativo" />
-
-              <InfoBox
-                label="Chave atualizada"
-                value={formatDate(
-                  data.empresa?.webhook_secret_updated_at || null
-                )}
-              />
+              <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-700">
+                O token deve ser exatamente o mesmo usado pela Kiwify no webhook.
+                Quando a Kiwify enviar o evento com esse token, o ReyCart vai
+                identificar automaticamente a empresa correta.
+              </div>
             </div>
           </ConfigCard>
 
@@ -462,6 +588,18 @@ export default function ConfiguracoesPage() {
                   ? formatDate(ultimoWebhook.created_at)
                   : "Sem data disponível"}
               </p>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <InfoBox
+                label="Último evento da integração"
+                value={formatDate(data.integracao?.ultimo_evento_em || null)}
+              />
+
+              <InfoBox
+                label="Último status"
+                value={data.integracao?.ultimo_evento_status || "Não informado"}
+              />
             </div>
 
             <div className="mt-5">
