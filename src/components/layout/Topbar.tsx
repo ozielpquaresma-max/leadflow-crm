@@ -28,15 +28,29 @@ type WebhookNotificacao = {
   created_at: string | null;
 };
 
+function normalizeDateValue(value: string | null) {
+  if (!value) return null;
+
+  const hasTimezone =
+    value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
+
+  return hasTimezone ? value : `${value}Z`;
+}
+
 function formatDate(value: string | null) {
   if (!value) return "Agora";
 
+  const normalizedValue = normalizeDateValue(value);
+
+  if (!normalizedValue) return "Agora";
+
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Belem",
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(new Date(normalizedValue));
 }
 
 function getEventLabel(evento: string | null) {
