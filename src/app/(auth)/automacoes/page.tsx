@@ -122,31 +122,52 @@ export default function AutomacoesPage() {
     loadTemplates();
   }, []);
 
+  async function getEmpresaIdFromSession() {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      throw new Error(sessionError.message);
+    }
+
+    if (!session?.user) {
+      throw new Error("Sessão não encontrada.");
+    }
+
+    const { data: usuario, error: usuarioError } = await supabase
+      .from("usuarios")
+      .select("empresa_id")
+      .eq("auth_user_id", session.user.id)
+      .maybeSingle();
+
+    if (usuarioError) {
+      throw new Error(usuarioError.message);
+    }
+
+    const currentEmpresaId = usuario?.empresa_id as string | undefined;
+
+    if (!currentEmpresaId) {
+      throw new Error("Empresa vinculada à conta não encontrada.");
+    }
+
+    return currentEmpresaId;
+  }
+
   async function loadTemplates() {
     setLoading(true);
     setErrorMessage(null);
 
     try {
-      const { data: empresa, error: empresaError } = await supabase
-        .from("empresas")
-        .select("id")
-        .eq("slug", "leadflow-crm")
-        .single();
+      const currentEmpresaId = await getEmpresaIdFromSession();
 
-      if (empresaError) {
-        throw empresaError;
-      }
-
-      if (!empresa?.id) {
-        throw new Error("Empresa leadflow-crm não encontrada.");
-      }
-
-      setEmpresaId(empresa.id);
+      setEmpresaId(currentEmpresaId);
 
       const { data: modelos, error: modelosError } = await supabase
         .from("modelos_mensagens")
         .select("*")
-        .eq("empresa_id", empresa.id)
+        .eq("empresa_id", currentEmpresaId)
         .eq("ativo", true)
         .order("created_at", { ascending: true });
 
@@ -158,7 +179,7 @@ export default function AutomacoesPage() {
 
       if (modelosBanco.length === 0) {
         const registrosPadrao = defaultTemplates.map((template) => ({
-          empresa_id: empresa.id,
+          empresa_id: currentEmpresaId,
           tipo: template.id,
           titulo: template.title,
           descricao: template.description,
@@ -189,6 +210,7 @@ export default function AutomacoesPage() {
           : "Erro desconhecido ao carregar modelos.";
 
       setErrorMessage(message);
+      setTemplates(defaultTemplates);
       console.error("Erro ao carregar modelos:", error);
     } finally {
       setLoading(false);
@@ -362,8 +384,9 @@ export default function AutomacoesPage() {
         </h2>
 
         <p className="mt-1 text-sm text-blue-700">
-          Agora as alterações podem ser salvas no banco. Depois vamos conectar
-          esses modelos diretamente ao botão de WhatsApp da recuperação.
+          As alterações são salvas somente na empresa do usuário logado. Esses
+          modelos podem ser usados como base para as mensagens de recuperação no
+          WhatsApp.
         </p>
       </div>
 
@@ -391,7 +414,7 @@ export default function AutomacoesPage() {
 
       {loading ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
-          Carregando modelos de mensagens...
+          Carregando modelos de mensagens da sua empresa...
         </div>
       ) : (
         <div className="grid gap-5 xl:grid-cols-2">
@@ -456,8 +479,7 @@ export default function AutomacoesPage() {
                 <span className="font-semibold text-slate-500">
                   modelos_mensagens
                 </span>{" "}
-                e poderá ser usado como base para mensagens inteligentes no
-                WhatsApp.
+                vinculado exclusivamente à empresa logada.
               </p>
             </section>
           ))}
