@@ -98,71 +98,47 @@ function getUserMetadata(user: User) {
 }
 
 async function ensureDefaultIntegration(empresaId: string) {
-  const { data: integracaoExistente, error: integracaoError } = await supabase
-    .from("integracoes")
-    .select("id")
-    .eq("empresa_id", empresaId)
-    .eq("plataforma", "kiwify")
-    .maybeSingle();
+  const { error } = await supabase.from("integracoes").upsert(
+    {
+      empresa_id: empresaId,
+      plataforma: "kiwify",
+      nome: "Kiwify",
+      tipo_token: "query_token",
+      status: "pendente",
+      updated_at: new Date().toISOString(),
+    },
+    {
+      onConflict: "empresa_id,plataforma",
+      ignoreDuplicates: true,
+    }
+  );
 
-  if (integracaoError) {
-    throw new Error(integracaoError.message);
-  }
-
-  if (integracaoExistente?.id) {
-    return;
-  }
-
-  const { error: insertError } = await supabase.from("integracoes").insert({
-    empresa_id: empresaId,
-    plataforma: "kiwify",
-    nome: "Kiwify",
-    tipo_token: "query_token",
-    status: "pendente",
-    updated_at: new Date().toISOString(),
-  });
-
-  if (insertError) {
-    throw new Error(insertError.message);
+  if (error) {
+    throw new Error(error.message);
   }
 }
 
 async function ensureDefaultMessageTemplates(empresaId: string) {
-  const { data: modelosExistentes, error: modelosError } = await supabase
-    .from("modelos_mensagens")
-    .select("tipo")
-    .eq("empresa_id", empresaId);
+  const registrosPadrao = defaultTemplates.map((template) => ({
+    empresa_id: empresaId,
+    tipo: template.id,
+    titulo: template.title,
+    descricao: template.description,
+    mensagem: template.message,
+    ativo: true,
+    updated_at: new Date().toISOString(),
+  }));
 
-  if (modelosError) {
-    throw new Error(modelosError.message);
-  }
-
-  const existingTypes = new Set(
-    (modelosExistentes || []).map((modelo) => modelo.tipo)
+  const { error } = await supabase.from("modelos_mensagens").upsert(
+    registrosPadrao,
+    {
+      onConflict: "empresa_id,tipo",
+      ignoreDuplicates: true,
+    }
   );
 
-  const modelosFaltantes = defaultTemplates
-    .filter((template) => !existingTypes.has(template.id))
-    .map((template) => ({
-      empresa_id: empresaId,
-      tipo: template.id,
-      titulo: template.title,
-      descricao: template.description,
-      mensagem: template.message,
-      ativo: true,
-      updated_at: new Date().toISOString(),
-    }));
-
-  if (modelosFaltantes.length === 0) {
-    return;
-  }
-
-  const { error: insertError } = await supabase
-    .from("modelos_mensagens")
-    .insert(modelosFaltantes);
-
-  if (insertError) {
-    throw new Error(insertError.message);
+  if (error) {
+    throw new Error(error.message);
   }
 }
 
@@ -175,19 +151,22 @@ async function ensureAccountProvisioned(user: User, input?: ProvisioningInput) {
     throw new Error("E-mail do usuário não encontrado.");
   }
 
+  const nomeFromInputOrMetadata =
+    input?.nome?.trim() || metadata.full_name?.trim();
+
+  const empresaFromInputOrMetadata =
+    input?.empresa?.trim() || metadata.company_name?.trim();
+
+  const telefoneFromInputOrMetadata =
+    input?.telefone?.trim() || metadata.phone?.trim();
+
   const resolvedNome =
-    input?.nome?.trim() ||
-    metadata.full_name?.trim() ||
-    userEmail.split("@")[0] ||
-    "Usuário";
+    nomeFromInputOrMetadata || userEmail.split("@")[0] || "Usuário";
 
   const resolvedEmpresa =
-    input?.empresa?.trim() ||
-    metadata.company_name?.trim() ||
-    `Empresa de ${resolvedNome}`;
+    empresaFromInputOrMetadata || `Empresa de ${resolvedNome}`;
 
-  const resolvedTelefone =
-    input?.telefone?.trim() || metadata.phone?.trim() || null;
+  const resolvedTelefone = telefoneFromInputOrMetadata || null;
 
   const { data: usuarioExistente, error: usuarioError } = await supabase
     .from("usuarios")
@@ -238,14 +217,27 @@ async function ensureAccountProvisioned(user: User, input?: ProvisioningInput) {
 
     empresaId = novaEmpresa.id as string;
   } else {
+    const empresaUpdate: {
+      nome?: string;
+      email: string;
+      telefone?: string | null;
+      status: string;
+    } = {
+      email: userEmail,
+      status: "ativa",
+    };
+
+    if (empresaFromInputOrMetadata) {
+      empresaUpdate.nome = empresaFromInputOrMetadata;
+    }
+
+    if (telefoneFromInputOrMetadata) {
+      empresaUpdate.telefone = telefoneFromInputOrMetadata;
+    }
+
     const { error: updateEmpresaError } = await supabase
       .from("empresas")
-      .update({
-        nome: resolvedEmpresa,
-        email: userEmail,
-        telefone: resolvedTelefone,
-        status: "ativa",
-      })
+      .update(empresaUpdate)
       .eq("id", empresaId);
 
     if (updateEmpresaError) {

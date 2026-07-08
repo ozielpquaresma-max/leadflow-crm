@@ -121,6 +121,7 @@ function formatStatusIntegracao(status: string | null | undefined) {
     ativo: "Ativa",
     pendente: "Pendente",
     erro: "Com erro",
+    inativo: "Inativa",
   };
 
   return labels[status] || status;
@@ -134,6 +135,62 @@ function maskToken(token: string | null) {
   }
 
   return `${token.slice(0, 2)}${"•".repeat(8)}${token.slice(-2)}`;
+}
+
+async function getOrCreateKiwifyIntegration(empresaId: string) {
+  const selectFields =
+    "id, empresa_id, plataforma, nome, token_plataforma, tipo_token, status, ultimo_evento_em, ultimo_evento_status, updated_at";
+
+  const { data: integracaoExistente, error: integracaoError } = await supabase
+    .from("integracoes")
+    .select(selectFields)
+    .eq("empresa_id", empresaId)
+    .eq("plataforma", "kiwify")
+    .maybeSingle();
+
+  if (integracaoError) {
+    throw new Error(integracaoError.message);
+  }
+
+  if (integracaoExistente) {
+    return integracaoExistente as Integracao;
+  }
+
+  const { error: upsertError } = await supabase.from("integracoes").upsert(
+    {
+      empresa_id: empresaId,
+      plataforma: "kiwify",
+      nome: "Kiwify",
+      tipo_token: "query_token",
+      status: "pendente",
+      updated_at: new Date().toISOString(),
+    },
+    {
+      onConflict: "empresa_id,plataforma",
+      ignoreDuplicates: true,
+    }
+  );
+
+  if (upsertError) {
+    throw new Error(upsertError.message);
+  }
+
+  const { data: integracaoFinal, error: integracaoFinalError } = await supabase
+    .from("integracoes")
+    .select(selectFields)
+    .eq("empresa_id", empresaId)
+    .eq("plataforma", "kiwify")
+    .maybeSingle();
+
+  if (integracaoFinalError) {
+    throw new Error(integracaoFinalError.message);
+  }
+
+  if (!integracaoFinal) {
+    throw new Error("Não foi possível preparar a integração Kiwify.");
+  }
+
+  return integracaoFinal as Integracao;
 }
 
 function ConfigCard({
@@ -268,44 +325,7 @@ export default function ConfiguracoesPage() {
         throw new Error(empresaError.message);
       }
 
-      const { data: integracaoExistente, error: integracaoError } =
-        await supabase
-          .from("integracoes")
-          .select(
-            "id, empresa_id, plataforma, nome, token_plataforma, tipo_token, status, ultimo_evento_em, ultimo_evento_status, updated_at"
-          )
-          .eq("empresa_id", empresaId)
-          .eq("plataforma", "kiwify")
-          .maybeSingle();
-
-      if (integracaoError) {
-        throw new Error(integracaoError.message);
-      }
-
-      let integracao = integracaoExistente as Integracao | null;
-
-      if (!integracao) {
-        const { data: novaIntegracao, error: novaIntegracaoError } =
-          await supabase
-            .from("integracoes")
-            .insert({
-              empresa_id: empresaId,
-              plataforma: "kiwify",
-              nome: "Kiwify",
-              tipo_token: "query_token",
-              status: "pendente",
-            })
-            .select(
-              "id, empresa_id, plataforma, nome, token_plataforma, tipo_token, status, ultimo_evento_em, ultimo_evento_status, updated_at"
-            )
-            .single();
-
-        if (novaIntegracaoError) {
-          throw new Error(novaIntegracaoError.message);
-        }
-
-        integracao = novaIntegracao as Integracao;
-      }
+      const integracao = await getOrCreateKiwifyIntegration(empresaId);
 
       const [
         totalWebhooksResult,
