@@ -73,7 +73,7 @@ const defaultTemplates: MessageTemplate[] = [
   {
     id: "ultima_tentativa",
     title: "Última tentativa",
-    description: "Mensagem final antes de marcar como perdido.",
+    description: "Mensagem final antes de encerrar a tentativa de recuperação.",
     status: "Final",
     badgeClass: "bg-purple-50 text-purple-700 ring-purple-100",
     message:
@@ -336,12 +336,12 @@ export default function AutomacoesPage() {
           <p className="text-sm font-semibold text-blue-600">ReyCart</p>
 
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
-            Automações
+            Mensagens de recuperação
           </h1>
 
           <p className="mt-2 max-w-3xl text-slate-600">
-            Configure os modelos de mensagens usados na recuperação de PIX
-            pendentes, carrinhos abandonados e pagamentos recusados.
+            Edite os modelos usados para abordar clientes com PIX pendente,
+            checkout não concluído, cartão recusado e follow-ups de recuperação.
           </p>
         </div>
 
@@ -374,19 +374,19 @@ export default function AutomacoesPage() {
 
       {savedId === "todos" ? (
         <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-semibold text-emerald-700">
-          Todos os modelos foram salvos no Supabase.
+          Todos os modelos foram salvos para sua empresa.
         </div>
       ) : null}
 
       <div className="mb-8 rounded-2xl border border-blue-100 bg-blue-50 p-5 shadow-sm">
         <h2 className="text-lg font-bold text-blue-950">
-          Modelos conectados ao Supabase
+          Modelos padrão da sua empresa
         </h2>
 
-        <p className="mt-1 text-sm text-blue-700">
-          As alterações são salvas somente na empresa do usuário logado. Esses
-          modelos podem ser usados como base para as mensagens de recuperação no
-          WhatsApp.
+        <p className="mt-1 text-sm leading-6 text-blue-700">
+          Estes textos são criados automaticamente para cada nova empresa. Você
+          pode editar qualquer mensagem antes de usar no WhatsApp. As alterações
+          ficam vinculadas somente à empresa do usuário logado.
         </p>
       </div>
 
@@ -397,7 +397,7 @@ export default function AutomacoesPage() {
 
         <p className="mt-1 text-sm text-slate-500">
           Use essas variáveis dentro das mensagens. O ReyCart troca
-          automaticamente pelos dados reais da venda.
+          automaticamente pelos dados reais da oportunidade.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -475,10 +475,7 @@ export default function AutomacoesPage() {
               />
 
               <p className="mt-3 text-xs text-slate-400">
-                Esse texto será salvo em{" "}
-                <span className="font-semibold text-slate-500">
-                  modelos_mensagens
-                </span>{" "}
+                Este modelo será usado como base nas ações de recuperação e fica
                 vinculado exclusivamente à empresa logada.
               </p>
             </section>
