@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { RecoveryActions } from "@/features/recoveries/components/RecoveryActions";
 import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -54,25 +53,39 @@ type PageProps = {
   }>;
 };
 
-function formatCurrency(value: number | null) {
-  if (!value) return "R$ 0,00";
+function normalizeDateValue(value: string | null) {
+  if (!value) return null;
 
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
+  const hasTimezone =
+    value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
+
+  return hasTimezone ? value : `${value}Z`;
 }
 
-function formatData(data: string | null) {
-  if (!data) return "Não informado";
+function formatData(value: string | null) {
+  if (!value) return "Não informado";
+
+  const normalizedValue = normalizeDateValue(value);
+
+  if (!normalizedValue) return "Não informado";
 
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Belem",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(data));
+  }).format(new Date(normalizedValue));
+}
+
+function formatCurrency(value: number | null) {
+  const amount = Number(value || 0);
+
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(amount);
 }
 
 function formatTempo(minutos: number | null) {
@@ -163,6 +176,10 @@ function getStatusClass(status: string | null) {
     return "bg-red-50 text-red-700 ring-red-100";
   }
 
+  if (status === "pago") {
+    return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+  }
+
   return "bg-slate-50 text-slate-700 ring-slate-100";
 }
 
@@ -201,10 +218,8 @@ function getWhatsAppLink(venda: RecuperacaoVenda) {
 
   const telefoneComPais = telefone.startsWith("55") ? telefone : `55${telefone}`;
 
-  const mensagem = getWhatsAppMessage(venda);
-
   return `https://wa.me/${telefoneComPais}?text=${encodeURIComponent(
-    mensagem
+    getWhatsAppMessage(venda)
   )}`;
 }
 
@@ -216,11 +231,12 @@ function InfoItem({
   value: string | number | null | undefined;
 }) {
   return (
-    <div>
+    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
         {label}
       </p>
-      <p className="mt-1 text-sm font-medium text-slate-800">
+
+      <p className="mt-1 break-words text-sm font-bold text-slate-950">
         {value || "Não informado"}
       </p>
     </div>
@@ -258,11 +274,9 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
     );
   }
 
-  const whatsappMessage = getWhatsAppMessage(venda);
-
   return (
-    <div className="h-[calc(100vh-73px)] space-y-6 overflow-y-auto px-0 pb-10 pr-2">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <main className="h-[calc(100vh-73px)] overflow-y-auto bg-slate-50 p-6 pb-10 lg:p-8">
+      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <Link
             href="/recuperacao"
@@ -271,216 +285,256 @@ export default async function DetalheRecuperacaoPage({ params }: PageProps) {
             ← Voltar para recuperação
           </Link>
 
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
             Detalhes da oportunidade
           </h1>
 
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 md:text-base">
-            Veja os dados do cliente, pedido, histórico de contatos e ações de
-            recuperação.
+          <p className="mt-2 max-w-4xl text-slate-600">
+            Acompanhe os dados do pedido, cliente, pagamento e histórico de
+            interações desta oportunidade.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-          Pedido externo:{" "}
-          <span className="font-semibold text-slate-950">
-            {venda.pedido_externo_id || "Não informado"}
+        <div className="flex flex-wrap gap-2">
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${getStatusClass(
+              venda.status
+            )}`}
+          >
+            {venda.status_label || venda.status || "Pendente"}
+          </span>
+
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${getStatusRecuperacaoClass(
+              venda.status_recuperacao
+            )}`}
+          >
+            {formatStatusRecuperacao(venda.status_recuperacao)}
           </span>
         </div>
       </div>
 
       {error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-          Erro ao carregar dados do Supabase: {error.message}
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+          Erro ao carregar oportunidade: {error.message}
         </div>
       ) : null}
 
       {historicoError ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-700">
-          A oportunidade foi carregada, mas houve erro ao buscar o histórico:{" "}
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-700">
+          Não foi possível carregar o histórico de interações:{" "}
           {historicoError.message}
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-blue-600">Cliente</p>
-                <h2 className="mt-1 text-xl font-bold text-slate-950">
-                  {venda.cliente_nome || "Cliente sem nome"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {venda.cliente_email || "E-mail não informado"}
-                </p>
-              </div>
-
-              <span
-                className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ring-1 ${getStatusRecuperacaoClass(
-                  venda.status_recuperacao
-                )}`}
-              >
-                {formatStatusRecuperacao(venda.status_recuperacao)}
-              </span>
-            </div>
-
-            <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              <InfoItem label="Telefone" value={venda.cliente_telefone} />
-
-              <InfoItem
-                label="Cidade/Estado"
-                value={
-                  venda.cliente_cidade || venda.cliente_estado
-                    ? `${venda.cliente_cidade || ""}${
-                        venda.cliente_cidade && venda.cliente_estado ? "/" : ""
-                      }${venda.cliente_estado || ""}`
-                    : null
-                }
-              />
-
-              <InfoItem
-                label="Última atualização"
-                value={formatData(venda.recuperacao_atualizada_em)}
-              />
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-blue-600">Pedido</p>
-                <h2 className="mt-1 text-xl font-bold text-slate-950">
-                  {venda.produto_nome || "Produto não informado"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {venda.plataforma_nome || "Plataforma não informada"}
-                </p>
-              </div>
-
-              <span
-                className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ring-1 ${getStatusClass(
-                  venda.status
-                )}`}
-              >
-                {venda.status_label || "Pendente"}
-              </span>
-            </div>
-
-            <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              <InfoItem
-                label="Valor do pedido"
-                value={formatCurrency(venda.valor)}
-              />
-
-              <InfoItem
-                label="Forma de pagamento"
-                value={formatPagamento(venda.metodo_pagamento)}
-              />
-
-              <InfoItem
-                label="Tempo desde criação"
-                value={formatTempo(venda.minutos_desde_criacao)}
-              />
-
-              <InfoItem
-                label="Criado na plataforma"
-                value={formatData(venda.criado_na_plataforma)}
-              />
-
-              <InfoItem label="Pedido externo" value={venda.pedido_externo_id} />
-
-              <InfoItem
-                label="Checkout"
-                value={venda.checkout_url ? "Disponível" : "Não informado"}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-blue-600">Ações rápidas</p>
-
-          <h2 className="mt-1 text-lg font-bold text-slate-950">
-            Recuperar venda
-          </h2>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Use as ações abaixo para falar com o cliente, abrir checkout, copiar
-            PIX ou registrar o resultado.
-          </p>
-
-          <div className="mt-5">
-            <RecoveryActions
-              empresaId={venda.empresa_id}
-              clienteId={venda.cliente_id}
-              pedidoId={venda.pedido_id}
-              whatsappUrl={getWhatsAppLink(venda)}
-              whatsappMessage={whatsappMessage}
-              checkoutUrl={venda.checkout_url}
-              pixCode={venda.pix_copia_cola}
-              clienteNome={venda.cliente_nome}
-              clienteTelefone={venda.cliente_telefone}
-              produtoNome={venda.produto_nome}
-              status={venda.status}
-              valor={venda.valor}
-              statusRecuperacao={venda.status_recuperacao}
-            />
-          </div>
-        </div>
+      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <InfoItem label="Cliente" value={venda.cliente_nome} />
+        <InfoItem label="Produto" value={venda.produto_nome} />
+        <InfoItem label="Valor" value={formatCurrency(venda.valor)} />
+        <InfoItem label="Pagamento" value={formatPagamento(venda.metodo_pagamento)} />
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 p-5">
-          <h2 className="text-lg font-semibold text-slate-950">
-            Histórico de contatos
+      <div className="mb-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">
+            Dados do pedido
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Registro das ações realizadas nesta oportunidade.
+            Informações recebidas pela integração da plataforma.
+          </p>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <InfoItem label="ID do pedido interno" value={venda.pedido_id} />
+
+            <InfoItem
+              label="ID externo"
+              value={venda.pedido_externo_id || "Não informado"}
+            />
+
+            <InfoItem
+              label="Plataforma"
+              value={venda.plataforma_nome || "Kiwify"}
+            />
+
+            <InfoItem
+              label="Status do pedido"
+              value={venda.status_label || venda.status || "Não informado"}
+            />
+
+            <InfoItem
+              label="Criado na plataforma"
+              value={formatData(venda.criado_na_plataforma)}
+            />
+
+            <InfoItem
+              label="Tempo desde criação"
+              value={formatTempo(venda.minutos_desde_criacao)}
+            />
+
+            <InfoItem
+              label="Pago em"
+              value={venda.pago_em ? formatData(venda.pago_em) : "Não pago"}
+            />
+
+            <InfoItem
+              label="Atualização da recuperação"
+              value={formatData(venda.recuperacao_atualizada_em)}
+            />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">
+            Ações rápidas
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Use os atalhos abaixo para recuperar a venda.
+          </p>
+
+          <div className="mt-5 space-y-3">
+            <a
+              href={getWhatsAppLink(venda)}
+              target="_blank"
+              rel="noreferrer"
+              className={
+                venda.cliente_telefone
+                  ? "flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+                  : "flex w-full cursor-not-allowed items-center justify-center rounded-xl bg-slate-300 px-4 py-3 text-sm font-bold text-white"
+              }
+            >
+              Chamar no WhatsApp
+            </a>
+
+            {venda.checkout_url ? (
+              <a
+                href={venda.checkout_url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+              >
+                Abrir checkout
+              </a>
+            ) : (
+              <div className="flex w-full items-center justify-center rounded-xl bg-slate-200 px-4 py-3 text-sm font-bold text-slate-500">
+                Checkout não informado
+              </div>
+            )}
+
+            {venda.pix_copia_cola ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                  PIX copia e cola
+                </p>
+
+                <p className="mt-2 max-h-28 overflow-auto break-all font-mono text-xs text-amber-900">
+                  {venda.pix_copia_cola}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      </div>
+
+      <div className="mb-6 grid gap-6 xl:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">
+            Dados do cliente
+          </h2>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <InfoItem label="Nome" value={venda.cliente_nome} />
+            <InfoItem label="E-mail" value={venda.cliente_email} />
+            <InfoItem label="Telefone" value={venda.cliente_telefone} />
+            <InfoItem
+              label="Cidade/Estado"
+              value={
+                venda.cliente_cidade || venda.cliente_estado
+                  ? `${venda.cliente_cidade || "Cidade não informada"} / ${
+                      venda.cliente_estado || "UF não informada"
+                    }`
+                  : "Não informado"
+              }
+            />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">
+            Recuperação
+          </h2>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <InfoItem
+              label="Status da recuperação"
+              value={formatStatusRecuperacao(venda.status_recuperacao)}
+            />
+
+            <InfoItem
+              label="Total de interações"
+              value={venda.total_interacoes || 0}
+            />
+
+            <InfoItem
+              label="Última interação"
+              value={formatData(venda.ultima_interacao_em)}
+            />
+
+            <InfoItem
+              label="Resultado da última interação"
+              value={formatResultado(venda.ultima_interacao_resultado)}
+            />
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 p-5">
+          <h2 className="text-lg font-bold text-slate-950">
+            Histórico de interações
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Registros de ações realizadas nessa oportunidade.
           </p>
         </div>
 
-        <div className="p-5">
-          {interacoes.length > 0 ? (
-            <div className="space-y-4">
-              {interacoes.map((interacao) => (
-                <div
-                  key={interacao.id}
-                  className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
-                >
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-slate-950">
-                        {formatResultado(interacao.resultado)}
-                      </p>
+        {interacoes.length === 0 ? (
+          <div className="p-10 text-center text-sm text-slate-500">
+            Nenhuma interação registrada ainda.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {interacoes.map((interacao) => (
+              <div key={interacao.id} className="p-5">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="font-bold text-slate-950">
+                      {formatResultado(interacao.resultado)}
+                    </p>
 
-                      <p className="mt-1 text-xs font-medium text-slate-500">
-                        Canal: {formatCanal(interacao.canal)} • Tipo:{" "}
-                        {interacao.tipo || "Não informado"}
-                      </p>
-                    </div>
-
-                    <p className="text-xs font-medium text-slate-400">
-                      {formatData(interacao.created_at)}
+                    <p className="mt-1 text-sm text-slate-500">
+                      Canal: {formatCanal(interacao.canal)} • Tipo:{" "}
+                      {interacao.tipo || "Não informado"}
                     </p>
                   </div>
 
-                  {interacao.mensagem ? (
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      {interacao.mensagem}
-                    </p>
-                  ) : null}
+                  <p className="text-sm font-semibold text-slate-500">
+                    {formatData(interacao.created_at)}
+                  </p>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500">
-              Nenhum contato registrado para esta oportunidade.
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+
+                {interacao.mensagem ? (
+                  <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+                    {interacao.mensagem}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
   );
 }
