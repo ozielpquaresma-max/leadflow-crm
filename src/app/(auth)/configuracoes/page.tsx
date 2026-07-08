@@ -39,23 +39,44 @@ type ModeloMensagem = {
   updated_at: string | null;
 };
 
+type WebhookMetrics = {
+  totalWebhooks: number;
+  processados: number;
+  comErro: number;
+};
+
 type ConfiguracoesData = {
   empresa: Empresa | null;
   integracao: Integracao | null;
   webhooks: WebhookLog[];
   modelos: ModeloMensagem[];
+  metrics: WebhookMetrics;
 };
+
+function normalizeDateValue(value: string | null) {
+  if (!value) return null;
+
+  const hasTimezone =
+    value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
+
+  return hasTimezone ? value : `${value}Z`;
+}
 
 function formatDate(value: string | null) {
   if (!value) return "Não informado";
 
+  const normalizedValue = normalizeDateValue(value);
+
+  if (!normalizedValue) return "Não informado";
+
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Belem",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(new Date(normalizedValue));
 }
 
 function getEventLabel(evento: string | null) {
@@ -150,6 +171,11 @@ export default function ConfiguracoesPage() {
     integracao: null,
     webhooks: [],
     modelos: [],
+    metrics: {
+      totalWebhooks: 0,
+      processados: 0,
+      comErro: 0,
+    },
   });
 
   const [loading, setLoading] = useState(true);
@@ -174,13 +200,9 @@ export default function ConfiguracoesPage() {
     ? `${webhookBaseUrl}?token=${encodeURIComponent(tokenSalvo)}`
     : "";
 
-  const totalWebhooks = data.webhooks.length;
-  const webhooksProcessados = data.webhooks.filter(
-    (webhook) => webhook.processado === true
-  ).length;
-  const webhooksComErro = data.webhooks.filter(
-    (webhook) => webhook.processado === false
-  ).length;
+  const totalWebhooks = data.metrics.totalWebhooks;
+  const webhooksProcessados = data.metrics.processados;
+  const webhooksComErro = data.metrics.comErro;
   const ultimoWebhook = data.webhooks[0] || null;
 
   const modelosAtivos = data.modelos.filter(
@@ -271,32 +293,74 @@ export default function ConfiguracoesPage() {
         integracao = novaIntegracao as Integracao;
       }
 
-      const { data: webhooks, error: webhooksError } = await supabase
-        .from("webhooks")
-        .select("id, evento, processado, created_at")
-        .eq("empresa_id", empresaId)
-        .order("created_at", { ascending: false })
-        .limit(10);
+      const [
+        totalWebhooksResult,
+        processadosResult,
+        comErroResult,
+        webhooksResult,
+        modelosResult,
+      ] = await Promise.all([
+        supabase
+          .from("webhooks")
+          .select("id", { count: "exact", head: true })
+          .eq("empresa_id", empresaId),
 
-      if (webhooksError) {
-        throw new Error(webhooksError.message);
+        supabase
+          .from("webhooks")
+          .select("id", { count: "exact", head: true })
+          .eq("empresa_id", empresaId)
+          .eq("processado", true),
+
+        supabase
+          .from("webhooks")
+          .select("id", { count: "exact", head: true })
+          .eq("empresa_id", empresaId)
+          .eq("processado", false),
+
+        supabase
+          .from("webhooks")
+          .select("id, evento, processado, created_at")
+          .eq("empresa_id", empresaId)
+          .order("created_at", { ascending: false })
+          .limit(10),
+
+        supabase
+          .from("modelos_mensagens")
+          .select("id, tipo, ativo, updated_at")
+          .eq("empresa_id", empresaId)
+          .order("updated_at", { ascending: false }),
+      ]);
+
+      if (totalWebhooksResult.error) {
+        throw new Error(totalWebhooksResult.error.message);
       }
 
-      const { data: modelos, error: modelosError } = await supabase
-        .from("modelos_mensagens")
-        .select("id, tipo, ativo, updated_at")
-        .eq("empresa_id", empresaId)
-        .order("updated_at", { ascending: false });
+      if (processadosResult.error) {
+        throw new Error(processadosResult.error.message);
+      }
 
-      if (modelosError) {
-        throw new Error(modelosError.message);
+      if (comErroResult.error) {
+        throw new Error(comErroResult.error.message);
+      }
+
+      if (webhooksResult.error) {
+        throw new Error(webhooksResult.error.message);
+      }
+
+      if (modelosResult.error) {
+        throw new Error(modelosResult.error.message);
       }
 
       setData({
         empresa: empresa as Empresa,
         integracao,
-        webhooks: (webhooks || []) as WebhookLog[],
-        modelos: (modelos || []) as ModeloMensagem[],
+        webhooks: (webhooksResult.data || []) as WebhookLog[],
+        modelos: (modelosResult.data || []) as ModeloMensagem[],
+        metrics: {
+          totalWebhooks: totalWebhooksResult.count || 0,
+          processados: processadosResult.count || 0,
+          comErro: comErroResult.count || 0,
+        },
       });
 
       setTokenInput(integracao?.token_plataforma || "");
@@ -622,7 +686,7 @@ export default function ConfiguracoesPage() {
             description="Resumo dos últimos eventos recebidos pela sua conta."
           >
             <div className="grid gap-3 md:grid-cols-3">
-              <InfoBox label="Últimos eventos" value={totalWebhooks} />
+              <InfoBox label="Total de eventos" value={totalWebhooks} />
               <InfoBox label="Processados" value={webhooksProcessados} />
               <InfoBox label="Com erro" value={webhooksComErro} />
             </div>
