@@ -96,11 +96,11 @@ function getModeloLabel(tipo: string | null) {
 function maskToken(token: string | null) {
   if (!token) return "Token não cadastrado";
 
-  if (token.length <= 12) {
-    return "••••••••";
+  if (token.length <= 4) {
+    return "••••";
   }
 
-  return `${token.slice(0, 6)}${"•".repeat(18)}${token.slice(-6)}`;
+  return `${token.slice(0, 2)}${"•".repeat(8)}${token.slice(-2)}`;
 }
 
 function ConfigCard({
@@ -156,7 +156,8 @@ export default function ConfiguracoesPage() {
   const [savingToken, setSavingToken] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
-  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [copiedBaseUrl, setCopiedBaseUrl] = useState(false);
+  const [copiedFinalUrl, setCopiedFinalUrl] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -167,7 +168,11 @@ export default function ConfiguracoesPage() {
     ).replace(/\/$/, "");
   }, []);
 
-  const webhookUrl = `${appUrl}/api/webhooks/kiwify`;
+  const webhookBaseUrl = `${appUrl}/api/webhooks/kiwify`;
+  const tokenSalvo = data.integracao?.token_plataforma || "";
+  const webhookFinalUrl = tokenSalvo
+    ? `${webhookBaseUrl}?token=${encodeURIComponent(tokenSalvo)}`
+    : "";
 
   const totalWebhooks = data.webhooks.length;
   const webhooksProcessados = data.webhooks.filter(
@@ -181,8 +186,6 @@ export default function ConfiguracoesPage() {
   const modelosAtivos = data.modelos.filter(
     (modelo) => modelo.ativo === true
   ).length;
-
-  const tokenSalvo = data.integracao?.token_plataforma || "";
 
   async function loadConfiguracoes() {
     setLoading(true);
@@ -253,7 +256,7 @@ export default function ConfiguracoesPage() {
               empresa_id: empresaId,
               plataforma: "kiwify",
               nome: "Kiwify",
-              tipo_token: "query_signature",
+              tipo_token: "query_token",
               status: "pendente",
             })
             .select(
@@ -310,13 +313,25 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  async function copyWebhookUrl() {
-    await navigator.clipboard.writeText(webhookUrl);
+  async function copyBaseUrl() {
+    await navigator.clipboard.writeText(webhookBaseUrl);
 
-    setCopiedWebhook(true);
+    setCopiedBaseUrl(true);
 
     setTimeout(() => {
-      setCopiedWebhook(false);
+      setCopiedBaseUrl(false);
+    }, 2000);
+  }
+
+  async function copyFinalUrl() {
+    if (!webhookFinalUrl) return;
+
+    await navigator.clipboard.writeText(webhookFinalUrl);
+
+    setCopiedFinalUrl(true);
+
+    setTimeout(() => {
+      setCopiedFinalUrl(false);
     }, 2000);
   }
 
@@ -332,6 +347,10 @@ export default function ConfiguracoesPage() {
 
       const tokenLimpo = tokenInput.trim();
 
+      if (!tokenLimpo) {
+        throw new Error("Cole o token da Kiwify antes de salvar.");
+      }
+
       const { data: integracaoAtualizada, error } = await supabase
         .from("integracoes")
         .upsert(
@@ -339,9 +358,9 @@ export default function ConfiguracoesPage() {
             empresa_id: data.empresa.id,
             plataforma: "kiwify",
             nome: "Kiwify",
-            token_plataforma: tokenLimpo || null,
-            tipo_token: "query_signature",
-            status: tokenLimpo ? "ativo" : "pendente",
+            token_plataforma: tokenLimpo,
+            tipo_token: "query_token",
+            status: "ativo",
             updated_at: new Date().toISOString(),
           },
           {
@@ -362,7 +381,9 @@ export default function ConfiguracoesPage() {
         integracao: integracaoAtualizada as Integracao,
       }));
 
-      setSuccessMessage("Token da Kiwify salvo com sucesso.");
+      setSuccessMessage(
+        "Token da Kiwify salvo. Agora copie a URL final e cole no webhook da Kiwify."
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Erro ao salvar token.";
@@ -460,53 +481,34 @@ export default function ConfiguracoesPage() {
 
           <ConfigCard
             title="Integração com Kiwify"
-            description="Copie a URL do webhook, cadastre na Kiwify e salve aqui o token/signature gerado pela plataforma."
+            description="Copie o token da Kiwify, salve no ReyCart e use a URL final gerada automaticamente."
           >
             <div className="space-y-5">
               <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
                 <p className="text-sm font-bold text-blue-950">
-                  Passo a passo
+                  Passo a passo correto
                 </p>
 
                 <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-blue-700">
-                  <li>Copie a URL do webhook abaixo.</li>
-                  <li>Cadastre essa URL na área de webhooks da Kiwify.</li>
-                  <li>Copie o token/signature mostrado pela Kiwify.</li>
-                  <li>Cole o token no campo abaixo e salve.</li>
-                  <li>Depois faça um teste de evento na Kiwify.</li>
+                  <li>Na Kiwify, vá em Webhooks e crie ou edite um webhook.</li>
+                  <li>Copie o campo Token que já aparece na Kiwify.</li>
+                  <li>Cole esse token no ReyCart e clique em Salvar token.</li>
+                  <li>Copie a URL final gerada pelo ReyCart.</li>
+                  <li>Cole a URL final no campo URL do Webhook da Kiwify.</li>
+                  <li>Salve na Kiwify e faça o teste do webhook.</li>
                 </ol>
               </div>
 
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  URL do webhook
-                </p>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="break-all font-mono text-sm text-slate-700">
-                    {webhookUrl}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={copyWebhookUrl}
-                  className="mt-3 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
-                >
-                  {copiedWebhook ? "URL copiada" : "Copiar URL"}
-                </button>
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Token/signature da Kiwify
+                  Token da Kiwify
                 </p>
 
                 <input
-                  value={showToken ? tokenInput : tokenInput}
+                  value={tokenInput}
                   onChange={(event) => setTokenInput(event.target.value)}
                   type={showToken ? "text" : "password"}
-                  placeholder="Cole aqui o token/signature gerado pela Kiwify"
+                  placeholder="Cole aqui o token curto que aparece na Kiwify"
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 font-mono text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
                 />
 
@@ -516,7 +518,9 @@ export default function ConfiguracoesPage() {
                   </p>
 
                   <p className="mt-1 break-all font-mono text-sm font-bold text-slate-950">
-                    {showToken ? tokenSalvo || "Token não cadastrado" : maskToken(tokenSalvo)}
+                    {showToken
+                      ? tokenSalvo || "Token não cadastrado"
+                      : maskToken(tokenSalvo)}
                   </p>
                 </div>
 
@@ -540,13 +544,64 @@ export default function ConfiguracoesPage() {
                 </div>
               </div>
 
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  URL final para colar na Kiwify
+                </p>
+
+                <div
+                  className={
+                    webhookFinalUrl
+                      ? "rounded-2xl border border-emerald-200 bg-emerald-50 p-4"
+                      : "rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  }
+                >
+                  <p
+                    className={
+                      webhookFinalUrl
+                        ? "break-all font-mono text-sm font-bold text-emerald-800"
+                        : "break-all font-mono text-sm text-slate-500"
+                    }
+                  >
+                    {webhookFinalUrl ||
+                      "Salve primeiro o token da Kiwify para gerar a URL final."}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={copyFinalUrl}
+                  disabled={!webhookFinalUrl}
+                  className="mt-3 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {copiedFinalUrl ? "URL final copiada" : "Copiar URL final"}
+                </button>
+              </div>
+
+              <details className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <summary className="cursor-pointer text-sm font-bold text-slate-700">
+                  Ver URL base técnica
+                </summary>
+
+                <div className="mt-3 rounded-xl bg-white p-3">
+                  <p className="break-all font-mono text-xs text-slate-600">
+                    {webhookBaseUrl}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={copyBaseUrl}
+                  className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                >
+                  {copiedBaseUrl ? "URL base copiada" : "Copiar URL base"}
+                </button>
+              </details>
+
               <div className="grid gap-3 md:grid-cols-3">
                 <InfoBox label="Plataforma" value="Kiwify" />
 
-                <InfoBox
-                  label="Tipo de validação"
-                  value="signature na URL"
-                />
+                <InfoBox label="Validação" value="Token na URL" />
 
                 <InfoBox
                   label="Status"
@@ -555,9 +610,9 @@ export default function ConfiguracoesPage() {
               </div>
 
               <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-700">
-                O token deve ser exatamente o mesmo usado pela Kiwify no webhook.
-                Quando a Kiwify enviar o evento com esse token, o ReyCart vai
-                identificar automaticamente a empresa correta.
+                O token salvo no ReyCart precisa ser o mesmo token exibido no
+                webhook da Kiwify. A URL final já inclui esse token para o
+                ReyCart identificar automaticamente a empresa correta.
               </div>
             </div>
           </ConfigCard>
