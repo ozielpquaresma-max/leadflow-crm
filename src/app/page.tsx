@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-type AuthMode = "login" | "cadastro";
+type AuthMode = "login" | "cadastro" | "recuperar";
 
 type ProvisioningInput = {
   nome?: string;
@@ -50,6 +50,14 @@ async function provisionAccount(input: ProvisioningInput) {
   }
 
   return result;
+}
+
+function getPasswordRecoveryRedirectUrl() {
+  if (typeof window === "undefined") {
+    return "/redefinir-senha";
+  }
+
+  return `${window.location.origin}/redefinir-senha`;
 }
 
 export default function HomePage() {
@@ -208,6 +216,45 @@ export default function HomePage() {
     }
   }
 
+  async function handlePasswordRecovery(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const emailLimpo = email.trim().toLowerCase();
+
+    if (!emailLimpo) {
+      setErrorMessage("Informe o e-mail da sua conta.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(emailLimpo, {
+        redirectTo: getPasswordRecoveryRedirectUrl(),
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setSuccessMessage(
+        "Enviamos um link de recuperação para o seu e-mail. Abra o link recebido para criar uma nova senha."
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar o e-mail de recuperação.";
+
+      setErrorMessage(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (checkingSession) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6">
@@ -341,7 +388,7 @@ export default function HomePage() {
                   setSuccessMessage(null);
                 }}
                 className={`flex-1 rounded-xl px-4 py-3 text-sm font-bold transition ${
-                  mode === "login"
+                  mode === "login" || mode === "recuperar"
                     ? "bg-blue-600 text-white shadow-sm"
                     : "text-slate-600 hover:text-slate-950"
                 }`}
@@ -354,13 +401,17 @@ export default function HomePage() {
               <h2 className="text-2xl font-black tracking-tight text-slate-950">
                 {mode === "cadastro"
                   ? "Comece sua conta no ReyCart"
-                  : "Acesse sua conta"}
+                  : mode === "recuperar"
+                    ? "Recuperar senha"
+                    : "Acesse sua conta"}
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 {mode === "cadastro"
                   ? "Cadastre sua empresa para começar a receber eventos da sua plataforma de venda e recuperar pedidos não finalizados."
-                  : "Entre com seu e-mail e senha para continuar gerenciando suas recuperações."}
+                  : mode === "recuperar"
+                    ? "Informe o e-mail da sua conta para receber o link de recuperação de senha."
+                    : "Entre com seu e-mail e senha para continuar gerenciando suas recuperações."}
               </p>
             </div>
 
@@ -473,6 +524,42 @@ export default function HomePage() {
                   empresa, integração inicial e modelos de mensagens.
                 </p>
               </form>
+            ) : mode === "recuperar" ? (
+              <form onSubmit={handlePasswordRecovery} className="space-y-4">
+                <div>
+                  <label className="text-sm font-bold text-slate-700">
+                    E-mail da conta
+                  </label>
+
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="voce@empresa.com"
+                    className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="h-12 w-full rounded-2xl bg-blue-600 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {loading ? "Enviando link..." : "Enviar link de recuperação"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                  }}
+                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Voltar para o login
+                </button>
+              </form>
             ) : (
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
@@ -490,9 +577,23 @@ export default function HomePage() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-bold text-slate-700">
-                    Senha
-                  </label>
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="text-sm font-bold text-slate-700">
+                      Senha
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("recuperar");
+                        setErrorMessage(null);
+                        setSuccessMessage(null);
+                      }}
+                      className="text-xs font-bold text-blue-600 transition hover:text-blue-700"
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
 
                   <input
                     type="password"
