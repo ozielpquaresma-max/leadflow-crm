@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -118,7 +119,7 @@ function getEventLabel(evento: string | null) {
     checkout_abandoned: "Checkout abandonado",
     order_rejected: "Compra recusada",
     order_approved: "Compra aprovada",
-    kiwify_event: "Evento Kiwify",
+    kiwify_event: "Evento recebido",
     pix_pendente: "PIX pendente",
     checkout_abandonado: "Checkout abandonado",
     cartao_recusado: "Cartão recusado",
@@ -259,6 +260,8 @@ function ResultadoCard({
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+
   const [data, setData] = useState<DashboardData>({
     vendas: [],
     webhooks: [],
@@ -267,107 +270,125 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [authRedirecting, setAuthRedirecting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  const loadDashboard = useCallback(async (silent = false) => {
-    if (silent) {
-      setUpdating(true);
-    } else {
-      setLoading(true);
-    }
+  const loadDashboard = useCallback(
+    async (silent = false) => {
+      if (authRedirecting) return;
 
-    setErrorMessage(null);
-
-    try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError) {
-        throw new Error(sessionError.message);
+      if (silent) {
+        setUpdating(true);
+      } else {
+        setLoading(true);
       }
 
-      if (!session?.user) {
-        throw new Error("Sessão não encontrada.");
+      setErrorMessage(null);
+
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          throw new Error(sessionError.message);
+        }
+
+        if (!session?.user) {
+          setAuthRedirecting(true);
+          setData({
+            vendas: [],
+            webhooks: [],
+            totalWebhooks: 0,
+          });
+
+          router.replace("/");
+          return;
+        }
+
+        const { data: usuario, error: usuarioError } = await supabase
+          .from("usuarios")
+          .select("empresa_id")
+          .eq("auth_user_id", session.user.id)
+          .maybeSingle();
+
+        if (usuarioError) {
+          throw new Error(usuarioError.message);
+        }
+
+        const empresaId = usuario?.empresa_id as string | undefined;
+
+        if (!empresaId) {
+          throw new Error("Empresa vinculada à conta não encontrada.");
+        }
+
+        const [vendasResult, webhooksResult, totalWebhooksResult] =
+          await Promise.all([
+            supabase
+              .from("vw_recuperacao_vendas")
+              .select("*")
+              .eq("empresa_id", empresaId)
+              .order("criado_na_plataforma", { ascending: false }),
+
+            supabase
+              .from("webhooks")
+              .select("id, evento, processado, created_at")
+              .eq("empresa_id", empresaId)
+              .order("created_at", { ascending: false })
+              .limit(5),
+
+            supabase
+              .from("webhooks")
+              .select("id", { count: "exact", head: true })
+              .eq("empresa_id", empresaId),
+          ]);
+
+        if (vendasResult.error) {
+          throw new Error(vendasResult.error.message);
+        }
+
+        if (webhooksResult.error) {
+          throw new Error(webhooksResult.error.message);
+        }
+
+        if (totalWebhooksResult.error) {
+          throw new Error(totalWebhooksResult.error.message);
+        }
+
+        setData({
+          vendas: (vendasResult.data || []) as DashboardVenda[],
+          webhooks: (webhooksResult.data || []) as WebhookLog[],
+          totalWebhooks: totalWebhooksResult.count || 0,
+        });
+
+        setLastUpdate(new Date());
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Erro ao carregar dashboard.";
+
+        setErrorMessage(message);
+        setData({
+          vendas: [],
+          webhooks: [],
+          totalWebhooks: 0,
+        });
+
+        console.error("Erro ao carregar dashboard:", error);
+      } finally {
+        setLoading(false);
+        setUpdating(false);
       }
-
-      const { data: usuario, error: usuarioError } = await supabase
-        .from("usuarios")
-        .select("empresa_id")
-        .eq("auth_user_id", session.user.id)
-        .maybeSingle();
-
-      if (usuarioError) {
-        throw new Error(usuarioError.message);
-      }
-
-      const empresaId = usuario?.empresa_id as string | undefined;
-
-      if (!empresaId) {
-        throw new Error("Empresa vinculada à conta não encontrada.");
-      }
-
-      const [vendasResult, webhooksResult, totalWebhooksResult] =
-        await Promise.all([
-          supabase
-            .from("vw_recuperacao_vendas")
-            .select("*")
-            .eq("empresa_id", empresaId)
-            .order("criado_na_plataforma", { ascending: false }),
-
-          supabase
-            .from("webhooks")
-            .select("id, evento, processado, created_at")
-            .eq("empresa_id", empresaId)
-            .order("created_at", { ascending: false })
-            .limit(5),
-
-          supabase
-            .from("webhooks")
-            .select("id", { count: "exact", head: true })
-            .eq("empresa_id", empresaId),
-        ]);
-
-      if (vendasResult.error) {
-        throw new Error(vendasResult.error.message);
-      }
-
-      if (webhooksResult.error) {
-        throw new Error(webhooksResult.error.message);
-      }
-
-      if (totalWebhooksResult.error) {
-        throw new Error(totalWebhooksResult.error.message);
-      }
-
-      setData({
-        vendas: (vendasResult.data || []) as DashboardVenda[],
-        webhooks: (webhooksResult.data || []) as WebhookLog[],
-        totalWebhooks: totalWebhooksResult.count || 0,
-      });
-
-      setLastUpdate(new Date());
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Erro ao carregar dashboard.";
-
-      setErrorMessage(message);
-      setData({
-        vendas: [],
-        webhooks: [],
-        totalWebhooks: 0,
-      });
-
-      console.error("Erro ao carregar dashboard:", error);
-    } finally {
-      setLoading(false);
-      setUpdating(false);
-    }
-  }, []);
+    },
+    [authRedirecting, router]
+  );
 
   useEffect(() => {
+    if (authRedirecting) return;
+
     loadDashboard();
 
     const interval = window.setInterval(() => {
@@ -377,7 +398,7 @@ export default function DashboardPage() {
     return () => {
       window.clearInterval(interval);
     };
-  }, [loadDashboard]);
+  }, [authRedirecting, loadDashboard]);
 
   const resumo = useMemo(() => {
     const vendas = data.vendas;
@@ -448,6 +469,16 @@ export default function DashboardPage() {
     };
   }, [data]);
 
+  if (authRedirecting) {
+    return (
+      <main className="flex h-[calc(100vh-73px)] items-center justify-center bg-slate-50 p-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
+          Redirecionando para o login...
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="h-[calc(100vh-73px)] overflow-y-auto bg-slate-50 p-6 pb-10 lg:p-8">
       <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -460,7 +491,7 @@ export default function DashboardPage() {
 
           <p className="mt-2 max-w-4xl text-slate-600">
             Visão geral das oportunidades de recuperação, valores em aberto,
-            resultados dos contatos e últimos eventos recebidos da Kiwify.
+            resultados dos contatos e últimos eventos recebidos.
           </p>
         </div>
 
@@ -637,7 +668,7 @@ export default function DashboardPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Pedidos mais recentes enviados pela Kiwify para recuperação.
+                    Pedidos mais recentes enviados para recuperação.
                   </p>
                 </div>
 
@@ -796,7 +827,7 @@ export default function DashboardPage() {
                   href="/integracoes"
                   className="flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
                 >
-                  Ver integração Kiwify
+                  Ver integração
                 </Link>
               </div>
             </section>
