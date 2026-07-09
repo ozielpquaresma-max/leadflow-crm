@@ -23,6 +23,8 @@ type DefaultTemplate = {
   message: string;
 };
 
+const EMPRESA_STATUS_ATIVO = "ativo";
+
 const defaultTemplates: DefaultTemplate[] = [
   {
     id: "pix_pendente",
@@ -204,7 +206,7 @@ async function ensureAccountProvisioned(user: User, input?: ProvisioningInput) {
         email: userEmail,
         telefone: resolvedTelefone,
         owner_user_id: user.id,
-        status: "ativa",
+        status: EMPRESA_STATUS_ATIVO,
         webhook_secret: createWebhookSecret(),
         webhook_secret_updated_at: new Date().toISOString(),
       })
@@ -224,7 +226,7 @@ async function ensureAccountProvisioned(user: User, input?: ProvisioningInput) {
       status: string;
     } = {
       email: userEmail,
-      status: "ativa",
+      status: EMPRESA_STATUS_ATIVO,
     };
 
     if (empresaFromInputOrMetadata) {
