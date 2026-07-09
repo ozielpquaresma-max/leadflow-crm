@@ -85,6 +85,27 @@ function getStatusLabel(status: string | null, statusLabel: string | null) {
   return status ? labels[status] || status : "Oportunidade";
 }
 
+function clearSupabaseBrowserStorage() {
+  if (typeof window === "undefined") return;
+
+  const storageKeys = [
+    ...Object.keys(window.localStorage),
+    ...Object.keys(window.sessionStorage),
+  ];
+
+  storageKeys.forEach((key) => {
+    const isSupabaseAuthKey =
+      key.startsWith("sb-") ||
+      key.toLowerCase().includes("supabase") ||
+      key.toLowerCase().includes("auth-token");
+
+    if (!isSupabaseAuthKey) return;
+
+    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
+  });
+}
+
 export function Topbar({
   userName = "Usuário",
   userEmail = "",
@@ -119,10 +140,7 @@ export function Topbar({
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
 
-      if (
-        profileMenuRef.current &&
-        !profileMenuRef.current.contains(target)
-      ) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(target)) {
         setProfileMenuOpen(false);
       }
 
@@ -146,6 +164,8 @@ export function Topbar({
   }, []);
 
   async function loadNotifications() {
+    if (signingOut) return;
+
     setLoadingNotifications(true);
 
     try {
@@ -237,24 +257,36 @@ export function Topbar({
   }
 
   function openNotifications() {
+    if (signingOut) return;
+
     setNotificationsOpen((current) => !current);
     setProfileMenuOpen(false);
     loadNotifications();
   }
 
   async function handleSignOut() {
+    if (signingOut) return;
+
     setSigningOut(true);
+    setProfileMenuOpen(false);
+    setNotificationsOpen(false);
+    setOportunidades([]);
+    setWebhooks([]);
+    setTotalOportunidades(0);
 
     try {
       await supabase.auth.signOut();
-
-      setProfileMenuOpen(false);
-      router.replace("/");
-      router.refresh();
     } catch (error) {
       console.error("Erro ao sair da conta:", error);
     } finally {
-      setSigningOut(false);
+      clearSupabaseBrowserStorage();
+
+      router.replace("/");
+      router.refresh();
+
+      window.setTimeout(() => {
+        window.location.replace("/");
+      }, 50);
     }
   }
 
@@ -270,6 +302,7 @@ export function Topbar({
           onFocus={() => setSearchFocus(true)}
           onBlur={() => setSearchFocus(false)}
           className={cn(searchFocus ? "border-blue-500" : "")}
+          disabled={signingOut}
         />
       </form>
 
@@ -278,7 +311,8 @@ export function Topbar({
           <button
             type="button"
             onClick={openNotifications}
-            className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+            disabled={signingOut}
+            className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
             title="Notificações"
           >
             {Icons.bell(20)}
@@ -467,11 +501,12 @@ export function Topbar({
         <div ref={profileMenuRef} className="relative">
           <button
             type="button"
+            disabled={signingOut}
             onClick={() => {
               setProfileMenuOpen((current) => !current);
               setNotificationsOpen(false);
             }}
-            className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-gray-100"
+            className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Avatar name={userName} src={userAvatar} size="md" status="online" />
 
@@ -506,7 +541,8 @@ export function Topbar({
                 <button
                   type="button"
                   onClick={goToProfile}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-950"
+                  disabled={signingOut}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-950 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span className="text-gray-500">
                     <svg
@@ -524,7 +560,8 @@ export function Topbar({
                 <button
                   type="button"
                   onClick={goToSettings}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-950"
+                  disabled={signingOut}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-950 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span className="text-gray-500">{Icons.settings(16)}</span>
 
@@ -534,7 +571,8 @@ export function Topbar({
                 <button
                   type="button"
                   onClick={goToHelp}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-950"
+                  disabled={signingOut}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-950 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span className="text-gray-500">{Icons.helpCircle(16)}</span>
 
