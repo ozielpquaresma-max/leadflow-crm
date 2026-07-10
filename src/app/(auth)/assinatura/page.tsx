@@ -187,9 +187,9 @@ export default function AssinaturaPage() {
   }
 
   return (
-    <main className="min-h-[calc(100vh-73px)] bg-slate-50 px-5 py-6">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-5 flex flex-col justify-between gap-4 rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-sm md:flex-row md:items-center">
+    <main className="min-h-[calc(100vh-73px)] bg-slate-50 px-5 py-4">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950">
               <Image
@@ -203,39 +203,41 @@ export default function AssinaturaPage() {
             </div>
 
             <div>
-              <p className="text-xl font-black text-slate-950">ReyCart</p>
+              <p className="text-xl font-black leading-tight text-slate-950">
+                ReyCart
+              </p>
               <p className="text-sm font-medium text-slate-500">
                 Assinatura mensal
               </p>
             </div>
           </div>
 
-          <div className="rounded-2xl bg-blue-50 px-5 py-3 text-blue-700">
+          <div className="shrink-0 rounded-2xl bg-blue-50 px-5 py-3 text-blue-700">
             <p className="text-xs font-black uppercase tracking-wide">
               Plano profissional
             </p>
-            <p className="text-2xl font-black">R$ 49,00/mês</p>
+            <p className="text-2xl font-black leading-tight">R$ 49,00/mês</p>
           </div>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-[0.88fr_1.12fr]">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h1 className="text-2xl font-black tracking-tight text-slate-950">
               Ative seu acesso
             </h1>
 
-            <p className="mt-3 text-sm leading-6 text-slate-500">
+            <p className="mt-2 text-sm leading-6 text-slate-500">
               Libere o uso completo do ReyCart para recuperar vendas pendentes,
               organizar oportunidades e acompanhar seus atendimentos em um único
               painel.
             </p>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm font-black text-slate-950">
                 O plano inclui:
               </p>
 
-              <div className="mt-3 space-y-2 text-sm text-slate-600">
+              <div className="mt-3 grid gap-2 text-sm text-slate-600">
                 <p>✓ Painel de recuperação de vendas</p>
                 <p>✓ Gestão de oportunidades por cliente</p>
                 <p>✓ Mensagens prontas para atendimento</p>
@@ -245,7 +247,7 @@ export default function AssinaturaPage() {
             </div>
 
             {status ? (
-              <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
                 <p>
                   <span className="font-bold text-slate-900">Empresa:</span>{" "}
                   {status.empresaNome}
@@ -268,31 +270,31 @@ export default function AssinaturaPage() {
             ) : null}
 
             {loadingStatus ? (
-              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
                 Carregando assinatura...
               </div>
             ) : null}
           </section>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-5">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4">
               <h2 className="text-xl font-black text-slate-950">
                 Dados para ativação
               </h2>
 
-              <p className="mt-2 text-sm leading-6 text-slate-500">
+              <p className="mt-1 text-sm leading-6 text-slate-500">
                 Preencha os dados abaixo para gerar sua assinatura mensal.
               </p>
             </div>
 
             {errorMessage ? (
-              <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 {errorMessage}
               </div>
             ) : null}
 
             {successMessage ? (
-              <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+              <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
                 {successMessage}
               </div>
             ) : null}
@@ -302,13 +304,13 @@ export default function AssinaturaPage() {
                 href={paymentLink}
                 target="_blank"
                 rel="noreferrer"
-                className="mb-4 block rounded-2xl bg-blue-600 px-5 py-4 text-center text-sm font-black text-white transition hover:bg-blue-700"
+                className="mb-3 block rounded-2xl bg-blue-600 px-5 py-3 text-center text-sm font-black text-white transition hover:bg-blue-700"
               >
                 Abrir pagamento
               </a>
             ) : null}
 
-            <form onSubmit={handleCheckout} className="space-y-4">
+            <form onSubmit={handleCheckout} className="space-y-3">
               <div>
                 <label className="text-sm font-bold text-slate-700">
                   Nome do assinante ou empresa
@@ -317,7 +319,7 @@ export default function AssinaturaPage() {
                 <input
                   value={nome}
                   onChange={(event) => setNome(event.target.value)}
-                  className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                  className="mt-1.5 h-10 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
                   placeholder="Ex: Minha Loja Digital"
                   disabled={loading}
                 />
@@ -332,13 +334,13 @@ export default function AssinaturaPage() {
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                  className="mt-1.5 h-10 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
                   placeholder="voce@empresa.com"
                   disabled={loading}
                 />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-2">
                 <div>
                   <label className="text-sm font-bold text-slate-700">
                     WhatsApp
@@ -347,7 +349,7 @@ export default function AssinaturaPage() {
                   <input
                     value={telefone}
                     onChange={(event) => setTelefone(event.target.value)}
-                    className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                    className="mt-1.5 h-10 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
                     placeholder="Opcional"
                     disabled={loading}
                   />
@@ -361,7 +363,7 @@ export default function AssinaturaPage() {
                   <input
                     value={documento}
                     onChange={(event) => setDocumento(event.target.value)}
-                    className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                    className="mt-1.5 h-10 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
                     placeholder="Recomendado"
                     disabled={loading}
                   />
@@ -380,7 +382,7 @@ export default function AssinaturaPage() {
                       event.target.value as "UNDEFINED" | "PIX" | "BOLETO"
                     )
                   }
-                  className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                  className="mt-1.5 h-10 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
                   disabled={loading}
                 >
                   <option value="UNDEFINED">Escolher na próxima etapa</option>
@@ -392,7 +394,7 @@ export default function AssinaturaPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="h-12 w-full rounded-2xl bg-blue-600 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="h-11 w-full rounded-2xl bg-blue-600 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {loading ? "Gerando assinatura..." : "Assinar por R$ 49,00/mês"}
               </button>
