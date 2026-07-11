@@ -73,6 +73,30 @@ type AsaasSubscriptionResponse = {
   }>;
 };
 
+type AsaasPayment = {
+  id?: string;
+  status?: string;
+  value?: number;
+  dueDate?: string;
+  invoiceUrl?: string;
+  bankSlipUrl?: string;
+  billingType?: string;
+  subscription?: string;
+};
+
+type AsaasSubscriptionPaymentsResponse = {
+  object?: string;
+  hasMore?: boolean;
+  totalCount?: number;
+  limit?: number;
+  offset?: number;
+  data?: AsaasPayment[];
+  errors?: Array<{
+    code?: string;
+    description?: string;
+  }>;
+};
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const asaasApiKey = process.env.ASAAS_API_KEY;
@@ -124,7 +148,7 @@ function getAsaasErrorMessage(response: unknown) {
 
   const firstError = result?.errors?.[0]?.description;
 
-  return firstError || "Erro ao comunicar com o Asaas.";
+  return firstError || "Erro ao comunicar com o sistema de pagamento.";
 }
 
 async function asaasRequest<T>(path: string, init: RequestInit) {
@@ -293,7 +317,7 @@ async function getOrCreateBillingCustomer({
   );
 
   if (!asaasCustomer.id) {
-    throw new Error("O Asaas não retornou o ID do cliente.");
+    throw new Error("O sistema de pagamento não retornou o ID do cliente.");
   }
 
   const payload = {
@@ -337,7 +361,7 @@ async function createAsaasSubscription({
   body: BillingBody;
 }) {
   if (!billingCustomer.asaas_customer_id) {
-    throw new Error("Cliente Asaas não encontrado.");
+    throw new Error("Cliente de cobrança não encontrado.");
   }
 
   const billingType = body.billingType || "UNDEFINED";
@@ -366,10 +390,36 @@ async function createAsaasSubscription({
   );
 
   if (!asaasSubscription.id) {
-    throw new Error("O Asaas não retornou o ID da assinatura.");
+    throw new Error("O sistema de pagamento não retornou o ID da assinatura.");
   }
 
   return asaasSubscription;
+}
+
+async function getFirstPaymentFromSubscription(subscriptionId: string) {
+  const response = await asaasRequest<AsaasSubscriptionPaymentsResponse>(
+    `/subscriptions/${subscriptionId}/payments`,
+    {
+      method: "GET",
+    }
+  );
+
+  const payments = response.data || [];
+
+  if (payments.length === 0) {
+    return null;
+  }
+
+  const pendingPayment =
+    payments.find((payment) => payment.status === "PENDING") || payments[0];
+
+  return pendingPayment;
+}
+
+function getPaymentLink(payment: AsaasPayment | null) {
+  if (!payment) return null;
+
+  return payment.invoiceUrl || payment.bankSlipUrl || null;
 }
 
 export async function POST(request: NextRequest) {
@@ -398,12 +448,19 @@ export async function POST(request: NextRequest) {
         assinaturaAtual.status as string
       )
     ) {
+      const assinaturaAtualId = assinaturaAtual.asaas_subscription_id as string;
+
+      const payment = await getFirstPaymentFromSubscription(assinaturaAtualId);
+
       return NextResponse.json({
         ok: true,
         assinaturaId: assinaturaAtual.id,
         status: assinaturaAtual.status,
+        paymentUrl: getPaymentLink(payment),
+        invoiceUrl: payment?.invoiceUrl || null,
+        bankSlipUrl: payment?.bankSlipUrl || null,
         message:
-          "Já existe uma assinatura atual para esta empresa. Aguarde a confirmação do pagamento ou regularize pelo Asaas.",
+          "Já existe uma assinatura atual para esta empresa. Vamos abrir a cobrança disponível para pagamento.",
       });
     }
 
@@ -419,6 +476,16 @@ export async function POST(request: NextRequest) {
       billingCustomer,
       body,
     });
+
+    const asaasSubscriptionId = asaasSubscription.id;
+
+    if (!asaasSubscriptionId) {
+      throw new Error("O sistema de pagamento não retornou o ID da assinatura.");
+    }
+
+    const firstPayment = await getFirstPaymentFromSubscription(
+      asaasSubscriptionId
+    );
 
     await supabaseAdmin
       .from("assinaturas")
@@ -436,7 +503,7 @@ export async function POST(request: NextRequest) {
         plano_id: plano.id,
         billing_cliente_id: billingCustomer.id,
         gateway: "asaas",
-        asaas_subscription_id: asaasSubscription.id,
+        asaas_subscription_id: asaasSubscriptionId,
         status: "pendente",
         atual: true,
         valor_centavos: plano.valor_centavos,
@@ -444,7 +511,10 @@ export async function POST(request: NextRequest) {
         intervalo: plano.intervalo,
         proximo_vencimento: asaasSubscription.nextDueDate || null,
         inicio_em: new Date().toISOString(),
-        raw: asaasSubscription,
+        raw: {
+          subscription: asaasSubscription,
+          firstPayment,
+        },
       })
       .select("id")
       .single();
@@ -456,12 +526,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       assinaturaId: assinatura.id,
-      asaasSubscriptionId: asaasSubscription.id,
+      asaasSubscriptionId,
       status: "pendente",
-      invoiceUrl: asaasSubscription.invoiceUrl || null,
-      bankSlipUrl: asaasSubscription.bankSlipUrl || null,
+      paymentUrl: getPaymentLink(firstPayment),
+      invoiceUrl: firstPayment?.invoiceUrl || null,
+      bankSlipUrl: firstPayment?.bankSlipUrl || null,
       message:
-        "Assinatura criada. Assim que o pagamento for confirmado pelo Asaas, o ReyCart será liberado automaticamente.",
+        "Assinatura criada. Você será direcionado para concluir o pagamento.",
     });
   } catch (error) {
     const message =
@@ -469,7 +540,7 @@ export async function POST(request: NextRequest) {
         ? error.message
         : "Erro desconhecido ao criar assinatura.";
 
-    console.error("Erro ao criar assinatura Asaas:", error);
+    console.error("Erro ao criar assinatura:", error);
 
     return NextResponse.json(
       {

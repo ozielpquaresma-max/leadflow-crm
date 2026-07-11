@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { FormEvent, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type AssinaturaStatus = {
@@ -14,11 +15,15 @@ type CheckoutResponse = {
   ok?: boolean;
   error?: string;
   message?: string;
+  paymentUrl?: string | null;
   invoiceUrl?: string | null;
   bankSlipUrl?: string | null;
 };
 
 export default function AssinaturaPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [status, setStatus] = useState<AssinaturaStatus | null>(null);
@@ -37,6 +42,34 @@ export default function AssinaturaPage() {
     loadStatus();
   }, []);
 
+  useEffect(() => {
+    const pagamento = searchParams.get("pagamento");
+
+    if (pagamento !== "sucesso") return;
+
+    setSuccessMessage(
+      "Pagamento recebido. Estamos liberando seu acesso ao ReyCart..."
+    );
+
+    const interval = window.setInterval(async () => {
+      const currentStatus = await loadStatus();
+
+      if (currentStatus?.empresaStatus === "ativo") {
+        window.clearInterval(interval);
+        router.replace("/dashboard");
+      }
+    }, 2500);
+
+    const timeout = window.setTimeout(() => {
+      window.clearInterval(interval);
+    }, 30000);
+
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(timeout);
+    };
+  }, [router, searchParams]);
+
   async function loadStatus() {
     setLoadingStatus(true);
 
@@ -49,7 +82,7 @@ export default function AssinaturaPage() {
 
       if (!userId) {
         setErrorMessage("Sessão não encontrada. Faça login novamente.");
-        return;
+        return null;
       }
 
       const { data: usuario, error: usuarioError } = await supabase
@@ -90,15 +123,19 @@ export default function AssinaturaPage() {
       const empresaNome = empresa.nome || "Sua empresa";
       const empresaEmail = empresa.email || usuario.email || "";
 
-      setStatus({
+      const nextStatus = {
         empresaNome,
         empresaStatus: empresa.status || "trial",
         assinaturaStatus: assinatura?.status || null,
-      });
+      };
+
+      setStatus(nextStatus);
 
       setNome((current) => current || empresaNome);
       setEmail((current) => current || empresaEmail);
       setTelefone((current) => current || empresa.telefone || "");
+
+      return nextStatus;
     } catch (error) {
       const message =
         error instanceof Error
@@ -106,6 +143,7 @@ export default function AssinaturaPage() {
           : "Não foi possível carregar os dados da assinatura.";
 
       setErrorMessage(message);
+      return null;
     } finally {
       setLoadingStatus(false);
     }
@@ -165,12 +203,19 @@ export default function AssinaturaPage() {
         );
       }
 
-      const link = result.invoiceUrl || result.bankSlipUrl || null;
+      const link =
+        result.paymentUrl || result.invoiceUrl || result.bankSlipUrl || null;
 
-      setPaymentLink(link);
+      if (link) {
+        setSuccessMessage("Assinatura criada. Abrindo pagamento...");
+        window.location.assign(link);
+        return;
+      }
+
+      setPaymentLink(null);
 
       setSuccessMessage(
-        "Assinatura criada com sucesso. Após a confirmação do pagamento, seu acesso será liberado automaticamente."
+        "Assinatura criada. Verifique seu e-mail para concluir o pagamento."
       );
 
       await loadStatus();
@@ -396,12 +441,11 @@ export default function AssinaturaPage() {
                 disabled={loading}
                 className="h-11 w-full rounded-2xl bg-blue-600 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                {loading ? "Gerando assinatura..." : "Assinar por R$ 49,00/mês"}
+                {loading ? "Abrindo pagamento..." : "Assinar por R$ 49,00/mês"}
               </button>
 
               <p className="text-center text-xs leading-5 text-slate-500">
-                O acesso será liberado automaticamente após a confirmação do
-                pagamento.
+                Após o pagamento, seu acesso será liberado automaticamente.
               </p>
             </form>
           </section>
