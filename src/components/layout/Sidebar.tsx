@@ -5,20 +5,26 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Icons } from "@/lib/icons";
 import { ROUTES } from "@/constants";
+
+type NavIcon =
+  | "dashboard"
+  | "recovery"
+  | "automation"
+  | "integration"
+  | "settings";
 
 interface NavItem {
   label: string;
-  icon: string;
+  icon: NavIcon;
   href: string;
 }
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", icon: "layoutDashboard", href: ROUTES.DASHBOARD },
-  { label: "Recuperação", icon: "dollarSign", href: "/recuperacao" },
-  { label: "Automações", icon: "zap", href: "/automacoes" },
-  { label: "Integrações", icon: "settings", href: "/integracoes" },
+  { label: "Dashboard", icon: "dashboard", href: ROUTES.DASHBOARD },
+  { label: "Recuperação", icon: "recovery", href: "/recuperacao" },
+  { label: "Automações", icon: "automation", href: "/automacoes" },
+  { label: "Integrações", icon: "integration", href: "/integracoes" },
   { label: "Configurações", icon: "settings", href: "/configuracoes" },
 ];
 
@@ -27,6 +33,237 @@ interface SidebarProps {
   onToggle?: (open: boolean) => void;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
+}
+
+function ChevronIcon({ direction }: { direction: "left" | "right" }) {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      {direction === "left" ? (
+        <path
+          d="m14.5 6-6 6 6 6"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : (
+        <path
+          d="m9.5 6 6 6-6 6"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M18 6 6 18"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+      />
+      <path
+        d="m6 6 12 12"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function MenuIcon({ name }: { name: NavIcon }) {
+  if (name === "dashboard") {
+    return (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M4.5 13.2c0-4.4 3.1-8 7.5-8s7.5 3.6 7.5 8"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+        />
+        <path
+          d="M7.5 14.5h9"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+        />
+        <path
+          d="M12 14.5 15.8 9"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+        />
+        <path
+          d="M6.5 18.5h11"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  if (name === "recovery") {
+    return (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M6.5 8.2h8.1c2 0 3.6 1.6 3.6 3.6s-1.6 3.6-3.6 3.6H8.2"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="m8.8 4.9-3.4 3.3 3.4 3.3"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M12 10.1v5.8"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+        />
+        <path
+          d="M14.3 11.2c-.4-.7-1.1-1.1-2.1-1.1-1.1 0-1.9.5-1.9 1.4 0 2.2 4.2.9 4.2 3.1 0 .9-.8 1.4-2.2 1.4-1.1 0-1.9-.4-2.4-1.2"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  if (name === "automation") {
+    return (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M12.6 3.8 6.9 12h4.4l-1 8.2 6-9h-4.2l.5-7.4Z"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M18.8 5.7h1.8"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M19.7 4.8v1.8"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M4.2 17.6H6"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M5.1 16.7v1.8"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  if (name === "integration") {
+    return (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M8.2 8.3h-1a3.7 3.7 0 0 0 0 7.4h1"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+        />
+        <path
+          d="M15.8 8.3h1a3.7 3.7 0 0 1 0 7.4h-1"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+        />
+        <path
+          d="M9.6 12h4.8"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+        />
+        <path
+          d="M5 5.1 3.9 4"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M19 18.9 20.1 20"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M19 5.1 20.1 4"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M5 18.9 3.9 20"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M5.5 7.5h13"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+      />
+      <path
+        d="M5.5 16.5h13"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+      />
+      <path
+        d="M9.2 7.5a1.8 1.8 0 1 0-3.6 0 1.8 1.8 0 0 0 3.6 0Z"
+        fill="currentColor"
+      />
+      <path
+        d="M18.4 16.5a1.8 1.8 0 1 0-3.6 0 1.8 1.8 0 0 0 3.6 0Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
 }
 
 export function Sidebar({
@@ -61,28 +298,39 @@ export function Sidebar({
   }) {
     return (
       <nav className="flex-1 space-y-2 overflow-y-auto px-3 py-4">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={mobile ? onMobileClose : undefined}
-            className={cn(
-              "flex items-center gap-3 rounded-2xl px-4 py-3 transition-all duration-200",
-              isActive(item.href)
-                ? "bg-blue-50 text-blue-600"
-                : "text-gray-700 hover:bg-gray-100"
-            )}
-            title={!expanded ? item.label : undefined}
-          >
-            <span className="flex-shrink-0">
-              {Icons[item.icon as keyof typeof Icons](21)}
-            </span>
+        {navItems.map((item) => {
+          const active = isActive(item.href);
 
-            {expanded ? (
-              <span className="truncate text-sm font-bold">{item.label}</span>
-            ) : null}
-          </Link>
-        ))}
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={mobile ? onMobileClose : undefined}
+              className={cn(
+                "group flex items-center gap-3 rounded-2xl px-4 py-3 transition-all duration-200",
+                active
+                  ? "bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100"
+                  : "text-gray-700 hover:bg-gray-100 hover:text-gray-950"
+              )}
+              title={!expanded ? item.label : undefined}
+            >
+              <span
+                className={cn(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl transition",
+                  active
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "bg-gray-50 text-gray-500 group-hover:bg-white group-hover:text-blue-700"
+                )}
+              >
+                <MenuIcon name={item.icon} />
+              </span>
+
+              {expanded ? (
+                <span className="truncate text-sm font-bold">{item.label}</span>
+              ) : null}
+            </Link>
+          );
+        })}
       </nav>
     );
   }
@@ -144,7 +392,7 @@ export function Sidebar({
               className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
               title="Abrir menu"
             >
-              {Icons.chevronRight(20)}
+              <ChevronIcon direction="right" />
             </button>
           ) : (
             <button
@@ -153,7 +401,7 @@ export function Sidebar({
               className="ml-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
               title="Fechar menu"
             >
-              {Icons.chevronLeft(20)}
+              <ChevronIcon direction="left" />
             </button>
           )}
         </div>
@@ -220,18 +468,7 @@ export function Sidebar({
               className="ml-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
               aria-label="Fechar menu"
             >
-              <svg
-                className="h-5 w-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
-              </svg>
+              <CloseIcon />
             </button>
           </div>
 
