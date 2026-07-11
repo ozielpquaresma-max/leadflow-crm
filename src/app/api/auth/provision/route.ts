@@ -35,7 +35,7 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
   },
 });
 
-const EMPRESA_STATUS_ATIVO = "ativo";
+const EMPRESA_STATUS_INICIAL = "trial";
 
 const defaultTemplates: DefaultTemplate[] = [
   {
@@ -253,7 +253,7 @@ async function ensureAccountProvisioned(user: User, input: ProvisionBody) {
         email: userEmail,
         telefone: resolvedTelefone,
         owner_user_id: user.id,
-        status: EMPRESA_STATUS_ATIVO,
+        status: EMPRESA_STATUS_INICIAL,
         webhook_secret: createWebhookSecret(),
         webhook_secret_updated_at: new Date().toISOString(),
       })
@@ -270,10 +270,8 @@ async function ensureAccountProvisioned(user: User, input: ProvisionBody) {
       nome?: string;
       email: string;
       telefone?: string | null;
-      status: string;
     } = {
       email: userEmail,
-      status: EMPRESA_STATUS_ATIVO,
     };
 
     if (empresaFromInputOrMetadata) {
