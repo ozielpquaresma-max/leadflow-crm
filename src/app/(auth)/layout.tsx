@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -48,6 +48,7 @@ export default function AuthLayout({
   const pathname = usePathname();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [userName, setUserName] = useState("Usuário");
   const [userEmail, setUserEmail] = useState("");
@@ -176,7 +177,7 @@ export default function AuthLayout({
 
   if (checkingSession) {
     return (
-      <main className="flex h-screen items-center justify-center bg-slate-950 px-6">
+      <main className="flex min-h-[100dvh] items-center justify-center bg-slate-950 px-6">
         <div className="rounded-3xl border border-white/10 bg-white/10 p-8 text-center shadow-2xl backdrop-blur">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-xl font-black text-blue-600">
             RC
@@ -195,13 +196,22 @@ export default function AuthLayout({
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar open={sidebarOpen} onToggle={setSidebarOpen} />
+    <div className="flex min-h-[100dvh] overflow-hidden bg-gray-50">
+      <Sidebar
+        open={sidebarOpen}
+        onToggle={setSidebarOpen}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
+      />
 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar userName={userName} userEmail={userEmail} />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <Topbar
+          userName={userName}
+          userEmail={userEmail}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+        />
 
-        {children}
+        <div className="min-w-0 flex-1 overflow-x-hidden">{children}</div>
       </div>
     </div>
   );
