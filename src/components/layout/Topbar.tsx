@@ -29,6 +29,36 @@ type WebhookNotificacao = {
   created_at: string | null;
 };
 
+const SOUND_STORAGE_KEY = "reycart:cartSoundEnabled";
+
+function getSeenStorageKey(empresaId: string) {
+  return `reycart:notificationsSeenAt:${empresaId}`;
+}
+
+function getStoredSeenAt(empresaId: string) {
+  if (typeof window === "undefined") return null;
+
+  return window.localStorage.getItem(getSeenStorageKey(empresaId));
+}
+
+function setStoredSeenAt(empresaId: string, value: string) {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.setItem(getSeenStorageKey(empresaId), value);
+}
+
+function getStoredSoundEnabled() {
+  if (typeof window === "undefined") return false;
+
+  return window.localStorage.getItem(SOUND_STORAGE_KEY) === "true";
+}
+
+function setStoredSoundEnabled(value: boolean) {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.setItem(SOUND_STORAGE_KEY, String(value));
+}
+
 function normalizeDateValue(value: string | null) {
   if (!value) return null;
 
@@ -86,6 +116,82 @@ function getStatusLabel(status: string | null, statusLabel: string | null) {
   return status ? labels[status] || status : "Oportunidade";
 }
 
+function isAbandonedCartOpportunity(oportunidade: OportunidadeNotificacao) {
+  const statusText = `${oportunidade.status || ""} ${
+    oportunidade.status_label || ""
+  }`.toLowerCase();
+
+  return (
+    statusText.includes("abandon") ||
+    statusText.includes("carrinho") ||
+    statusText.includes("checkout")
+  );
+}
+
+async function playCartNotificationSound() {
+  if (typeof window === "undefined") return;
+
+  try {
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+
+    if (!AudioContextClass) return;
+
+    const audioContext = new AudioContextClass();
+
+    if (audioContext.state === "suspended") {
+      await audioContext.resume();
+    }
+
+    const now = audioContext.currentTime;
+    const masterGain = audioContext.createGain();
+
+    masterGain.gain.setValueAtTime(0.0001, now);
+    masterGain.gain.exponentialRampToValueAtTime(0.28, now + 0.03);
+    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.78);
+    masterGain.connect(audioContext.destination);
+
+    function tone(
+      frequency: number,
+      start: number,
+      duration: number,
+      type: OscillatorType = "triangle"
+    ) {
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(frequency, now + start);
+      oscillator.frequency.exponentialRampToValueAtTime(
+        Math.max(80, frequency * 0.82),
+        now + start + duration
+      );
+
+      gain.gain.setValueAtTime(0.0001, now + start);
+      gain.gain.exponentialRampToValueAtTime(0.9, now + start + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
+
+      oscillator.connect(gain);
+      gain.connect(masterGain);
+
+      oscillator.start(now + start);
+      oscillator.stop(now + start + duration + 0.03);
+    }
+
+    tone(980, 0, 0.18, "triangle");
+    tone(1320, 0.16, 0.16, "sine");
+    tone(720, 0.34, 0.22, "triangle");
+
+    window.setTimeout(() => {
+      void audioContext.close().catch(() => null);
+    }, 900);
+  } catch {
+    // Alguns navegadores bloqueiam som até o usuário clicar em "Ativar som".
+  }
+}
+
 function clearSupabaseBrowserStorage() {
   if (typeof window === "undefined") return;
 
@@ -117,6 +223,12 @@ export function Topbar({
 
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const notificationMenuRef = useRef<HTMLDivElement | null>(null);
+  const knownOpportunityIdsRef = useRef<Set<string>>(new Set());
+  const firstNotificationsLoadRef = useRef(true);
+  const soundEnabledRef = useRef(false);
+  const empresaIdRef = useRef<string | null>(null);
+  const seenAtRef = useRef<string | null>(null);
+  const signingOutRef = useRef(false);
 
   const [searchFocus, setSearchFocus] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -124,19 +236,47 @@ export function Topbar({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
 
   const [oportunidades, setOportunidades] = useState<
     OportunidadeNotificacao[]
   >([]);
   const [webhooks, setWebhooks] = useState<WebhookNotificacao[]>([]);
   const [totalOportunidades, setTotalOportunidades] = useState(0);
+  const [newNotificationCount, setNewNotificationCount] = useState(0);
 
   const webhooksComErro = webhooks.filter(
     (webhook) => webhook.processado === false
   ).length;
 
-  const notificationCount = totalOportunidades + webhooksComErro;
+  const notificationCount = newNotificationCount;
   const notificationBadge = notificationCount > 99 ? "99+" : notificationCount;
+
+  useEffect(() => {
+    signingOutRef.current = signingOut;
+  }, [signingOut]);
+
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    const savedSoundEnabled = getStoredSoundEnabled();
+
+    setSoundEnabled(savedSoundEnabled);
+    soundEnabledRef.current = savedSoundEnabled;
+
+    loadNotifications();
+
+    const interval = window.setInterval(() => {
+      loadNotifications({ silent: true });
+    }, 15000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -161,15 +301,41 @@ export function Topbar({
     };
   }, []);
 
-  useEffect(() => {
-    loadNotifications();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  function markNotificationsAsSeen() {
+    const empresaId = empresaIdRef.current;
 
-  async function loadNotifications() {
-    if (signingOut) return;
+    if (!empresaId) {
+      setNewNotificationCount(0);
+      return;
+    }
 
-    setLoadingNotifications(true);
+    const now = new Date().toISOString();
+
+    seenAtRef.current = now;
+    setStoredSeenAt(empresaId, now);
+    setNewNotificationCount(0);
+  }
+
+  async function enableCartSound() {
+    setSoundEnabled(true);
+    soundEnabledRef.current = true;
+    setStoredSoundEnabled(true);
+
+    await playCartNotificationSound();
+  }
+
+  function disableCartSound() {
+    setSoundEnabled(false);
+    soundEnabledRef.current = false;
+    setStoredSoundEnabled(false);
+  }
+
+  async function loadNotifications(options?: { silent?: boolean }) {
+    if (signingOutRef.current) return;
+
+    if (!options?.silent) {
+      setLoadingNotifications(true);
+    }
 
     try {
       const {
@@ -182,6 +348,7 @@ export function Topbar({
         setOportunidades([]);
         setWebhooks([]);
         setTotalOportunidades(0);
+        setNewNotificationCount(0);
         return;
       }
 
@@ -197,8 +364,14 @@ export function Topbar({
         setOportunidades([]);
         setWebhooks([]);
         setTotalOportunidades(0);
+        setNewNotificationCount(0);
         return;
       }
+
+      empresaIdRef.current = empresaId;
+
+      const storedSeenAt = getStoredSeenAt(empresaId);
+      seenAtRef.current = storedSeenAt;
 
       const { data: oportunidadesData } = await supabase
         .from("vw_recuperacao_vendas")
@@ -214,6 +387,21 @@ export function Topbar({
         .select("pedido_id", { count: "exact", head: true })
         .eq("empresa_id", empresaId);
 
+      let novasOportunidadesQuery = supabase
+        .from("vw_recuperacao_vendas")
+        .select("pedido_id", { count: "exact", head: true })
+        .eq("empresa_id", empresaId);
+
+      if (storedSeenAt) {
+        novasOportunidadesQuery = novasOportunidadesQuery.gt(
+          "criado_na_plataforma",
+          storedSeenAt
+        );
+      }
+
+      const { count: novasOportunidadesCount } =
+        await novasOportunidadesQuery;
+
       const { data: webhooksData } = await supabase
         .from("webhooks")
         .select("id, evento, processado, created_at")
@@ -221,13 +409,62 @@ export function Topbar({
         .order("created_at", { ascending: false })
         .limit(5);
 
-      setOportunidades((oportunidadesData || []) as OportunidadeNotificacao[]);
+      let novosWebhooksErroQuery = supabase
+        .from("webhooks")
+        .select("id", { count: "exact", head: true })
+        .eq("empresa_id", empresaId)
+        .eq("processado", false);
+
+      if (storedSeenAt) {
+        novosWebhooksErroQuery = novosWebhooksErroQuery.gt(
+          "created_at",
+          storedSeenAt
+        );
+      }
+
+      const { count: novosWebhooksErroCount } =
+        await novosWebhooksErroQuery;
+
+      const oportunidadesAtuais = (oportunidadesData ||
+        []) as OportunidadeNotificacao[];
+
+      if (firstNotificationsLoadRef.current) {
+        oportunidadesAtuais.forEach((oportunidade) => {
+          knownOpportunityIdsRef.current.add(oportunidade.pedido_id);
+        });
+
+        firstNotificationsLoadRef.current = false;
+      } else {
+        const novasOportunidades = oportunidadesAtuais.filter(
+          (oportunidade) =>
+            !knownOpportunityIdsRef.current.has(oportunidade.pedido_id)
+        );
+
+        const novaOportunidadeAbandonada = novasOportunidades.some(
+          isAbandonedCartOpportunity
+        );
+
+        novasOportunidades.forEach((oportunidade) => {
+          knownOpportunityIdsRef.current.add(oportunidade.pedido_id);
+        });
+
+        if (novaOportunidadeAbandonada && soundEnabledRef.current) {
+          void playCartNotificationSound();
+        }
+      }
+
+      setOportunidades(oportunidadesAtuais);
       setTotalOportunidades(oportunidadesCount || 0);
       setWebhooks((webhooksData || []) as WebhookNotificacao[]);
+      setNewNotificationCount(
+        (novasOportunidadesCount || 0) + (novosWebhooksErroCount || 0)
+      );
     } catch (error) {
       console.error("Erro ao carregar notificações:", error);
     } finally {
-      setLoadingNotifications(false);
+      if (!options?.silent) {
+        setLoadingNotifications(false);
+      }
     }
   }
 
@@ -260,22 +497,30 @@ export function Topbar({
   }
 
   function openNotifications() {
-    if (signingOut) return;
+    if (signingOutRef.current) return;
 
-    setNotificationsOpen((current) => !current);
+    const willOpen = !notificationsOpen;
+
+    setNotificationsOpen(willOpen);
     setProfileMenuOpen(false);
-    loadNotifications();
+
+    if (willOpen) {
+      markNotificationsAsSeen();
+      loadNotifications();
+    }
   }
 
   async function handleSignOut() {
-    if (signingOut) return;
+    if (signingOutRef.current) return;
 
     setSigningOut(true);
+    signingOutRef.current = true;
     setProfileMenuOpen(false);
     setNotificationsOpen(false);
     setOportunidades([]);
     setWebhooks([]);
     setTotalOportunidades(0);
+    setNewNotificationCount(0);
 
     try {
       await supabase.auth.signOut();
@@ -361,8 +606,8 @@ export function Topbar({
           </button>
 
           {notificationsOpen ? (
-            <div className="fixed left-3 right-3 top-16 z-50 mt-2 max-h-[calc(100dvh-5rem)] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-3 sm:w-[360px]">
-              <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
+            <div className="fixed left-3 right-3 top-16 z-50 mt-2 max-h-[calc(100dvh-5rem)] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-3 sm:w-[380px]">
+              <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-4 py-3">
                 <div>
                   <p className="text-sm font-bold text-gray-950">
                     Notificações
@@ -371,16 +616,37 @@ export function Topbar({
                   <p className="mt-1 text-xs text-gray-500">
                     Oportunidades e eventos recentes.
                   </p>
+
+                  <p className="mt-2 text-[11px] font-medium text-gray-400">
+                    O sino zera quando você abre esta área.
+                  </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={loadNotifications}
-                  disabled={loadingNotifications}
-                  className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {loadingNotifications ? "Atualizando..." : "Atualizar"}
-                </button>
+                <div className="flex shrink-0 flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => loadNotifications()}
+                    disabled={loadingNotifications}
+                    className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {loadingNotifications ? "Atualizando..." : "Atualizar"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={
+                      soundEnabled ? disableCartSound : enableCartSound
+                    }
+                    className={cn(
+                      "rounded-xl px-3 py-2 text-xs font-bold transition",
+                      soundEnabled
+                        ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        : "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    )}
+                  >
+                    {soundEnabled ? "Som ativo" : "Ativar som"}
+                  </button>
+                </div>
               </div>
 
               <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto p-3 sm:max-h-[480px]">
@@ -635,3 +901,4 @@ export function Topbar({
     </header>
   );
 }
+
