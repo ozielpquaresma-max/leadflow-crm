@@ -149,8 +149,8 @@ async function playCartNotificationSound() {
     const masterGain = audioContext.createGain();
 
     masterGain.gain.setValueAtTime(0.0001, now);
-    masterGain.gain.exponentialRampToValueAtTime(0.28, now + 0.03);
-    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.78);
+    masterGain.gain.exponentialRampToValueAtTime(0.85, now + 0.03);
+    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.15);
     masterGain.connect(audioContext.destination);
 
     function tone(
@@ -182,7 +182,7 @@ async function playCartNotificationSound() {
 
     tone(980, 0, 0.18, "triangle");
     tone(1320, 0.16, 0.16, "sine");
-    tone(720, 0.34, 0.22, "triangle");
+    tone(720, 0.34, 0.22, "triangle"); tone(1180, 0.62, 0.22, "sine"); if ("vibrate" in navigator) navigator.vibrate([160, 80, 160]);
 
     window.setTimeout(() => {
       void audioContext.close().catch(() => null);
@@ -901,4 +901,5 @@ export function Topbar({
     </header>
   );
 }
+
 
