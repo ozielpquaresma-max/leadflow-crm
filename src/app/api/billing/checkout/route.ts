@@ -1,555 +1,492 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-type BillingBody = {
-  nome?: string;
-  email?: string;
-  telefone?: string;
-  documento?: string;
-  billingType?: "UNDEFINED" | "PIX" | "BOLETO";
-};
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-type Plano = {
-  id: string;
-  codigo: string;
-  nome: string;
-  valor_centavos: number;
-  moeda: string;
-  intervalo: string;
-};
-
-type Empresa = {
-  id: string;
-  nome: string | null;
-  email: string | null;
-  telefone: string | null;
-  status: string | null;
-};
-
-type UsuarioInterno = {
-  empresa_id: string;
-  nome: string | null;
-  email: string | null;
-};
-
-type BillingCliente = {
-  id: string;
-  empresa_id: string;
-  gateway: string;
-  asaas_customer_id: string | null;
-  nome: string | null;
-  email: string | null;
-  telefone: string | null;
-  documento: string | null;
-};
-
-type AsaasCustomerResponse = {
-  id?: string;
-  name?: string;
-  email?: string;
-  mobilePhone?: string;
+type CheckoutBody = {
   cpfCnpj?: string;
-  errors?: Array<{
-    code?: string;
-    description?: string;
-  }>;
+  documento?: string;
+  billingType?: string;
 };
 
-type AsaasSubscriptionResponse = {
-  id?: string;
-  customer?: string;
-  value?: number;
+type AsaasCustomer = {
+  id: string;
+};
+
+type AsaasSubscription = {
+  id: string;
   status?: string;
-  billingType?: string;
-  cycle?: string;
-  nextDueDate?: string;
-  description?: string;
-  externalReference?: string;
-  invoiceUrl?: string;
-  bankSlipUrl?: string;
-  errors?: Array<{
-    code?: string;
-    description?: string;
-  }>;
 };
 
 type AsaasPayment = {
   id?: string;
   status?: string;
-  value?: number;
-  dueDate?: string;
-  invoiceUrl?: string;
-  bankSlipUrl?: string;
-  billingType?: string;
-  subscription?: string;
+  invoiceUrl?: string | null;
+  bankSlipUrl?: string | null;
+  paymentUrl?: string | null;
+  dueDate?: string | null;
 };
 
-type AsaasSubscriptionPaymentsResponse = {
-  object?: string;
-  hasMore?: boolean;
-  totalCount?: number;
-  limit?: number;
-  offset?: number;
+type AsaasPaymentsResponse = {
   data?: AsaasPayment[];
-  errors?: Array<{
-    code?: string;
-    description?: string;
-  }>;
 };
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const asaasApiKey = process.env.ASAAS_API_KEY;
-const asaasBaseUrl =
-  process.env.ASAAS_BASE_URL || "https://api.asaas.com/v3";
-const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://reycart.com.br";
+const PLANO_CODIGO = "reycart_mensal_49";
 
-if (!supabaseUrl) {
-  throw new Error("NEXT_PUBLIC_SUPABASE_URL não configurada.");
-}
+function getEnv(name: string) {
+  const value = process.env[name];
 
-if (!serviceRoleKey) {
-  throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada.");
-}
-
-const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-});
-
-function getBearerToken(request: NextRequest) {
-  const authorization = request.headers.get("authorization");
-
-  if (!authorization) return null;
-
-  const [type, token] = authorization.split(" ");
-
-  if (type?.toLowerCase() !== "bearer") return null;
-
-  return token || null;
-}
-
-function onlyDigits(value?: string | null) {
-  return value ? value.replace(/\D/g, "") : "";
-}
-
-function formatDateForAsaas(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function getAsaasErrorMessage(response: unknown) {
-  const result = response as {
-    errors?: Array<{
-      description?: string;
-    }>;
-  };
-
-  const firstError = result?.errors?.[0]?.description;
-
-  return firstError || "Erro ao comunicar com o sistema de pagamento.";
-}
-
-async function asaasRequest<T>(path: string, init: RequestInit) {
-  if (!asaasApiKey) {
-    throw new Error("ASAAS_API_KEY não configurada.");
+  if (!value) {
+    throw new Error(`${name} não configurada`);
   }
 
-  const response = await fetch(`${asaasBaseUrl}${path}`, {
-    ...init,
+  return value;
+}
+
+function createAdminClient() {
+  const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
+function onlyNumbers(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function validateCpfCnpj(value: string) {
+  const numbers = onlyNumbers(value);
+  return numbers.length === 11 || numbers.length === 14;
+}
+
+function todayDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getAsaasBaseUrl() {
+  return process.env.ASAAS_BASE_URL || "https://api.asaas.com/v3";
+}
+
+async function asaasRequest<T>(
+  path: string,
+  options?: {
+    method?: "GET" | "POST" | "PUT";
+    body?: Record<string, unknown>;
+  }
+) {
+  const asaasApiKey = getEnv("ASAAS_API_KEY");
+  const baseUrl = getAsaasBaseUrl();
+
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: options?.method || "GET",
     headers: {
       "Content-Type": "application/json",
       access_token: asaasApiKey,
-      ...(init.headers || {}),
     },
+    body: options?.body ? JSON.stringify(options.body) : undefined,
+    cache: "no-store",
   });
 
-  const result = (await response.json().catch(() => null)) as T;
+  const rawText = await response.text();
+
+  let data: unknown = null;
+
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = rawText;
+  }
 
   if (!response.ok) {
-    throw new Error(getAsaasErrorMessage(result));
-  }
+    let message = `Erro Asaas HTTP ${response.status}`;
 
-  return result;
-}
+    if (
+      data &&
+      typeof data === "object" &&
+      "errors" in data &&
+      Array.isArray((data as { errors?: unknown[] }).errors)
+    ) {
+      const errors = (data as { errors: Array<{ description?: string }> })
+        .errors;
 
-async function getAuthenticatedUser(request: NextRequest) {
-  const token = getBearerToken(request);
-
-  if (!token) {
-    throw new Error("Token de sessão não enviado.");
-  }
-
-  const {
-    data: { user },
-    error,
-  } = await supabaseAdmin.auth.getUser(token);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (!user) {
-    throw new Error("Usuário não encontrado.");
-  }
-
-  return user;
-}
-
-async function getEmpresaFromUser(authUserId: string) {
-  const { data: usuario, error: usuarioError } = await supabaseAdmin
-    .from("usuarios")
-    .select("empresa_id, nome, email")
-    .eq("auth_user_id", authUserId)
-    .maybeSingle();
-
-  if (usuarioError) {
-    throw new Error(usuarioError.message);
-  }
-
-  if (!usuario?.empresa_id) {
-    throw new Error("Usuário interno não encontrado no ReyCart.");
-  }
-
-  const usuarioInterno = usuario as UsuarioInterno;
-
-  const { data: empresa, error: empresaError } = await supabaseAdmin
-    .from("empresas")
-    .select("id, nome, email, telefone, status")
-    .eq("id", usuarioInterno.empresa_id)
-    .maybeSingle();
-
-  if (empresaError) {
-    throw new Error(empresaError.message);
-  }
-
-  if (!empresa) {
-    throw new Error("Empresa não encontrada.");
-  }
-
-  return {
-    usuario: usuarioInterno,
-    empresa: empresa as Empresa,
-  };
-}
-
-async function getPlanoMensal() {
-  const { data: plano, error } = await supabaseAdmin
-    .from("planos")
-    .select("id, codigo, nome, valor_centavos, moeda, intervalo")
-    .eq("codigo", "reycart_mensal_49")
-    .eq("ativo", true)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (!plano) {
-    throw new Error("Plano mensal do ReyCart não encontrado.");
-  }
-
-  return plano as Plano;
-}
-
-async function getOrCreateBillingCustomer({
-  empresa,
-  usuario,
-  body,
-}: {
-  empresa: Empresa;
-  usuario: UsuarioInterno;
-  body: BillingBody;
-}) {
-  const { data: existingBillingCustomer, error: existingError } =
-    await supabaseAdmin
-      .from("billing_clientes")
-      .select(
-        "id, empresa_id, gateway, asaas_customer_id, nome, email, telefone, documento"
-      )
-      .eq("empresa_id", empresa.id)
-      .eq("gateway", "asaas")
-      .maybeSingle();
-
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-
-  const existing = existingBillingCustomer as BillingCliente | null;
-
-  if (existing?.asaas_customer_id) {
-    return existing;
-  }
-
-  const nome =
-    body.nome?.trim() ||
-    empresa.nome?.trim() ||
-    usuario.nome?.trim() ||
-    "Cliente ReyCart";
-
-  const email =
-    body.email?.trim().toLowerCase() ||
-    empresa.email?.trim().toLowerCase() ||
-    usuario.email?.trim().toLowerCase();
-
-  if (!email) {
-    throw new Error("Informe um e-mail para criar a assinatura.");
-  }
-
-  const telefoneLimpo = onlyDigits(body.telefone || empresa.telefone);
-  const documentoLimpo = onlyDigits(body.documento);
-
-  const asaasCustomer = await asaasRequest<AsaasCustomerResponse>(
-    "/customers",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        name: nome,
-        email,
-        mobilePhone: telefoneLimpo || undefined,
-        cpfCnpj: documentoLimpo || undefined,
-        externalReference: empresa.id,
-        notificationDisabled: false,
-        groupName: "ReyCart",
-      }),
+      message =
+        errors
+          .map((error) => error.description)
+          .filter(Boolean)
+          .join(" ") || message;
     }
-  );
 
-  if (!asaasCustomer.id) {
-    throw new Error("O sistema de pagamento não retornou o ID do cliente.");
+    throw new Error(message);
   }
 
-  const payload = {
-    empresa_id: empresa.id,
-    gateway: "asaas",
-    asaas_customer_id: asaasCustomer.id,
-    nome,
-    email,
-    telefone: telefoneLimpo || null,
-    documento: documentoLimpo || null,
-    raw: asaasCustomer,
-    updated_at: new Date().toISOString(),
-  };
-
-  const { data: billingCustomer, error: upsertError } = await supabaseAdmin
-    .from("billing_clientes")
-    .upsert(payload, {
-      onConflict: "empresa_id,gateway",
-    })
-    .select(
-      "id, empresa_id, gateway, asaas_customer_id, nome, email, telefone, documento"
-    )
-    .single();
-
-  if (upsertError) {
-    throw new Error(upsertError.message);
-  }
-
-  return billingCustomer as BillingCliente;
-}
-
-async function createAsaasSubscription({
-  empresa,
-  plano,
-  billingCustomer,
-  body,
-}: {
-  empresa: Empresa;
-  plano: Plano;
-  billingCustomer: BillingCliente;
-  body: BillingBody;
-}) {
-  if (!billingCustomer.asaas_customer_id) {
-    throw new Error("Cliente de cobrança não encontrado.");
-  }
-
-  const billingType = body.billingType || "UNDEFINED";
-  const today = new Date();
-  const nextDueDate = formatDateForAsaas(today);
-  const valor = plano.valor_centavos / 100;
-
-  const asaasSubscription = await asaasRequest<AsaasSubscriptionResponse>(
-    "/subscriptions",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        customer: billingCustomer.asaas_customer_id,
-        billingType,
-        value: valor,
-        nextDueDate,
-        cycle: "MONTHLY",
-        description: "Assinatura mensal ReyCart",
-        externalReference: empresa.id,
-        callback: {
-          successUrl: `${appUrl}/assinatura?pagamento=sucesso`,
-          autoRedirect: true,
-        },
-      }),
-    }
-  );
-
-  if (!asaasSubscription.id) {
-    throw new Error("O sistema de pagamento não retornou o ID da assinatura.");
-  }
-
-  return asaasSubscription;
+  return data as T;
 }
 
 async function getFirstPaymentFromSubscription(subscriptionId: string) {
-  const response = await asaasRequest<AsaasSubscriptionPaymentsResponse>(
-    `/subscriptions/${subscriptionId}/payments`,
-    {
-      method: "GET",
-    }
+  const paymentsResponse = await asaasRequest<AsaasPaymentsResponse>(
+    `/subscriptions/${subscriptionId}/payments`
   );
 
-  const payments = response.data || [];
-
-  if (payments.length === 0) {
-    return null;
-  }
-
-  const pendingPayment =
-    payments.find((payment) => payment.status === "PENDING") || payments[0];
-
-  return pendingPayment;
-}
-
-function getPaymentLink(payment: AsaasPayment | null) {
-  if (!payment) return null;
-
-  return payment.invoiceUrl || payment.bankSlipUrl || null;
+  return paymentsResponse.data?.[0] || null;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    const body = (await request.json().catch(() => ({}))) as BillingBody;
+    const authorization = request.headers.get("authorization") || "";
+    const token = authorization.replace("Bearer ", "").trim();
 
-    const { usuario, empresa } = await getEmpresaFromUser(user.id);
-    const plano = await getPlanoMensal();
+    if (!token) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Sessão não informada.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const body = (await request.json().catch(() => ({}))) as CheckoutBody;
+
+    const cpfCnpj = onlyNumbers(body.cpfCnpj || body.documento || "");
+
+    if (!validateCpfCnpj(cpfCnpj)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Para criar esta cobrança é necessário preencher um CPF ou CNPJ válido.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const supabaseAdmin = createAdminClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Sessão inválida.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const { data: usuario, error: usuarioError } = await supabaseAdmin
+      .from("usuarios")
+      .select("id, nome, email, empresa_id")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
+
+    if (usuarioError) {
+      throw usuarioError;
+    }
+
+    if (!usuario?.empresa_id) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Usuário sem empresa vinculada.",
+        },
+        { status: 404 }
+      );
+    }
+
+    const { data: empresa, error: empresaError } = await supabaseAdmin
+      .from("empresas")
+      .select("id, nome, email, status")
+      .eq("id", usuario.empresa_id)
+      .maybeSingle();
+
+    if (empresaError) {
+      throw empresaError;
+    }
+
+    if (!empresa) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Empresa não encontrada.",
+        },
+        { status: 404 }
+      );
+    }
+
+    const { data: plano, error: planoError } = await supabaseAdmin
+      .from("planos")
+      .select("id, codigo, nome, valor_centavos, moeda, intervalo, ativo")
+      .eq("codigo", PLANO_CODIGO)
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (planoError) {
+      throw planoError;
+    }
+
+    if (!plano) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Plano mensal do ReyCart não encontrado.",
+        },
+        { status: 404 }
+      );
+    }
 
     const { data: assinaturaAtual, error: assinaturaAtualError } =
       await supabaseAdmin
         .from("assinaturas")
-        .select("id, status, asaas_subscription_id")
+        .select(
+          "id, empresa_id, plano_id, status, asaas_subscription_id, proximo_vencimento, created_at"
+        )
         .eq("empresa_id", empresa.id)
-        .eq("atual", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
     if (assinaturaAtualError) {
-      throw new Error(assinaturaAtualError.message);
+      throw assinaturaAtualError;
     }
 
     if (
-      assinaturaAtual?.asaas_subscription_id &&
-      ["pendente", "ativa", "atrasada"].includes(
-        assinaturaAtual.status as string
-      )
+      empresa.status === "ativo" &&
+      assinaturaAtual?.status === "ativa"
     ) {
-      const assinaturaAtualId = assinaturaAtual.asaas_subscription_id as string;
-
-      const payment = await getFirstPaymentFromSubscription(assinaturaAtualId);
-
       return NextResponse.json({
         ok: true,
-        assinaturaId: assinaturaAtual.id,
-        status: assinaturaAtual.status,
-        paymentUrl: getPaymentLink(payment),
-        invoiceUrl: payment?.invoiceUrl || null,
-        bankSlipUrl: payment?.bankSlipUrl || null,
-        message:
-          "Já existe uma assinatura atual para esta empresa. Vamos abrir a cobrança disponível para pagamento.",
+        active: true,
+        empresaStatus: "ativo",
+        assinaturaStatus: "ativa",
+        message: "Sua assinatura já está ativa.",
       });
     }
 
-    const billingCustomer = await getOrCreateBillingCustomer({
-      empresa,
-      usuario,
-      body,
-    });
+    const { data: billingCliente, error: billingClienteError } =
+      await supabaseAdmin
+        .from("billing_clientes")
+        .select("id, empresa_id, asaas_customer_id")
+        .eq("empresa_id", empresa.id)
+        .maybeSingle();
 
-    const asaasSubscription = await createAsaasSubscription({
-      empresa,
-      plano,
-      billingCustomer,
-      body,
-    });
+    if (billingClienteError) {
+      throw billingClienteError;
+    }
+
+    const customerName =
+      empresa.nome ||
+      usuario.nome ||
+      user.email ||
+      "Cliente ReyCart";
+
+    const customerEmail =
+      empresa.email ||
+      usuario.email ||
+      user.email ||
+      "cliente@reycart.com.br";
+
+    let asaasCustomerId = billingCliente?.asaas_customer_id as
+      | string
+      | null
+      | undefined;
+
+    if (asaasCustomerId) {
+      await asaasRequest<AsaasCustomer>(`/customers/${asaasCustomerId}`, {
+        method: "PUT",
+        body: {
+          name: customerName,
+          email: customerEmail,
+          cpfCnpj,
+          externalReference: empresa.id,
+        },
+      });
+    } else {
+      const asaasCustomer = await asaasRequest<AsaasCustomer>("/customers", {
+        method: "POST",
+        body: {
+          name: customerName,
+          email: customerEmail,
+          cpfCnpj,
+          externalReference: empresa.id,
+        },
+      });
+
+      asaasCustomerId = asaasCustomer.id;
+
+      const { error: upsertClienteError } = await supabaseAdmin
+        .from("billing_clientes")
+        .upsert(
+          {
+            empresa_id: empresa.id,
+            asaas_customer_id: asaasCustomerId,
+            nome: customerName,
+            email: customerEmail,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "empresa_id",
+          }
+        );
+
+      if (upsertClienteError) {
+        throw upsertClienteError;
+      }
+    }
+
+    if (!asaasCustomerId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Não foi possível criar o cliente no Asaas.",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (assinaturaAtual?.asaas_subscription_id) {
+      const firstPayment = await getFirstPaymentFromSubscription(
+        assinaturaAtual.asaas_subscription_id
+      );
+
+      const paymentLink =
+        firstPayment?.paymentUrl ||
+        firstPayment?.invoiceUrl ||
+        firstPayment?.bankSlipUrl ||
+        null;
+
+      if (paymentLink) {
+        return NextResponse.json({
+          ok: true,
+          empresaStatus: empresa.status,
+          assinaturaStatus: assinaturaAtual.status,
+          paymentStatus: firstPayment?.status || null,
+          paymentUrl: paymentLink,
+          invoiceUrl: firstPayment?.invoiceUrl || null,
+          bankSlipUrl: firstPayment?.bankSlipUrl || null,
+          message: "Cobrança já existente localizada.",
+        });
+      }
+    }
+
+    const appUrl = getEnv("NEXT_PUBLIC_APP_URL").replace(/\/$/, "");
+    const valor = Number((Number(plano.valor_centavos) / 100).toFixed(2));
+    const vencimento = todayDate();
+
+    const asaasSubscription = await asaasRequest<AsaasSubscription>(
+      "/subscriptions",
+      {
+        method: "POST",
+        body: {
+          customer: asaasCustomerId,
+          billingType: body.billingType || "UNDEFINED",
+          value: valor,
+          nextDueDate: vencimento,
+          cycle: "MONTHLY",
+          description: "Assinatura mensal ReyCart",
+          externalReference: empresa.id,
+          callback: {
+            successUrl: `${appUrl}/assinatura?pagamento=sucesso`,
+            autoRedirect: true,
+          },
+        },
+      }
+    );
 
     const asaasSubscriptionId = asaasSubscription.id;
 
     if (!asaasSubscriptionId) {
-      throw new Error("O sistema de pagamento não retornou o ID da assinatura.");
+      throw new Error("O Asaas não retornou o ID da assinatura.");
+    }
+
+    let assinaturaId = assinaturaAtual?.id as string | undefined;
+
+    if (assinaturaId) {
+      const { error: updateAssinaturaError } = await supabaseAdmin
+        .from("assinaturas")
+        .update({
+          plano_id: plano.id,
+          status: "pendente",
+          asaas_subscription_id: asaasSubscriptionId,
+          valor_centavos: plano.valor_centavos,
+          moeda: plano.moeda,
+          intervalo: plano.intervalo,
+          proximo_vencimento: vencimento,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", assinaturaId);
+
+      if (updateAssinaturaError) {
+        throw updateAssinaturaError;
+      }
+    } else {
+      const { data: novaAssinatura, error: insertAssinaturaError } =
+        await supabaseAdmin
+          .from("assinaturas")
+          .insert({
+            empresa_id: empresa.id,
+            plano_id: plano.id,
+            status: "pendente",
+            asaas_subscription_id: asaasSubscriptionId,
+            valor_centavos: plano.valor_centavos,
+            moeda: plano.moeda,
+            intervalo: plano.intervalo,
+            proximo_vencimento: vencimento,
+          })
+          .select("id")
+          .single();
+
+      if (insertAssinaturaError) {
+        throw insertAssinaturaError;
+      }
+
+      assinaturaId = novaAssinatura.id;
     }
 
     const firstPayment = await getFirstPaymentFromSubscription(
       asaasSubscriptionId
     );
 
-    await supabaseAdmin
-      .from("assinaturas")
-      .update({
-        atual: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("empresa_id", empresa.id)
-      .eq("atual", true);
-
-    const { data: assinatura, error: assinaturaError } = await supabaseAdmin
-      .from("assinaturas")
-      .insert({
-        empresa_id: empresa.id,
-        plano_id: plano.id,
-        billing_cliente_id: billingCustomer.id,
-        gateway: "asaas",
-        asaas_subscription_id: asaasSubscriptionId,
-        status: "pendente",
-        atual: true,
-        valor_centavos: plano.valor_centavos,
-        moeda: plano.moeda,
-        intervalo: plano.intervalo,
-        proximo_vencimento: asaasSubscription.nextDueDate || null,
-        inicio_em: new Date().toISOString(),
-        raw: {
-          subscription: asaasSubscription,
-          firstPayment,
-        },
-      })
-      .select("id")
-      .single();
-
-    if (assinaturaError) {
-      throw new Error(assinaturaError.message);
-    }
+    const paymentLink =
+      firstPayment?.paymentUrl ||
+      firstPayment?.invoiceUrl ||
+      firstPayment?.bankSlipUrl ||
+      null;
 
     return NextResponse.json({
       ok: true,
-      assinaturaId: assinatura.id,
+      active: false,
+      empresaStatus: empresa.status,
+      assinaturaStatus: "pendente",
+      assinaturaId,
       asaasSubscriptionId,
-      status: "pendente",
-      paymentUrl: getPaymentLink(firstPayment),
+      paymentStatus: firstPayment?.status || null,
+      paymentUrl: paymentLink,
       invoiceUrl: firstPayment?.invoiceUrl || null,
       bankSlipUrl: firstPayment?.bankSlipUrl || null,
-      message:
-        "Assinatura criada. Você será direcionado para concluir o pagamento.",
+      message: "Cobrança criada com sucesso.",
     });
   } catch (error) {
     const message =
       error instanceof Error
         ? error.message
-        : "Erro desconhecido ao criar assinatura.";
-
-    console.error("Erro ao criar assinatura:", error);
+        : "Erro inesperado ao criar cobrança.";
 
     return NextResponse.json(
       {
         ok: false,
         error: message,
       },
-      {
-        status: 400,
-      }
+      { status: 500 }
     );
   }
 }
