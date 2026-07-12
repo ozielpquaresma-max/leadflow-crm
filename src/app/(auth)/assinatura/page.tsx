@@ -15,6 +15,8 @@ type BillingResponse = {
   bankSlipUrl?: string | null;
   message?: string;
   error?: string;
+  asaasStatusCode?: number;
+  asaasResponse?: unknown;
 };
 
 function createBrowserSupabaseClient() {
@@ -40,28 +42,59 @@ export default function AssinaturaPage() {
   const [empresaStatus, setEmpresaStatus] = useState<string | null>(null);
   const [assinaturaStatus, setAssinaturaStatus] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [paymentLink, setPaymentLink] = useState<string | null>(null);
+
   const [message, setMessage] = useState("Verificando sua assinatura...");
+  const [debugError, setDebugError] = useState<string | null>(null);
 
   const pagamentoSucesso = searchParams.get("pagamento") === "sucesso";
 
   async function getAccessToken() {
+    setDebugError(null);
+
     const {
       data: { session },
       error,
     } = await supabase.auth.getSession();
 
-    if (error || !session?.access_token) {
-      router.replace("/");
+    if (error) {
+      setDebugError(`Erro ao buscar sessão: ${error.message}`);
+      setMessage("Erro ao validar sua sessão. Saia e entre novamente.");
       return null;
     }
 
-    return session.access_token;
+    if (session?.access_token) {
+      return session.access_token;
+    }
+
+    const {
+      data: { session: refreshedSession },
+      error: refreshError,
+    } = await supabase.auth.refreshSession();
+
+    if (refreshError) {
+      setDebugError(`Erro ao atualizar sessão: ${refreshError.message}`);
+      setMessage("Sua sessão expirou. Saia e entre novamente.");
+      return null;
+    }
+
+    if (refreshedSession?.access_token) {
+      return refreshedSession.access_token;
+    }
+
+    setDebugError(
+      "Sessão não encontrada no navegador. Faça logout e login novamente com e-mail e senha."
+    );
+    setMessage("Sessão não encontrada. Saia e entre novamente.");
+    return null;
   }
 
   async function syncBilling(options?: { silent?: boolean }) {
     const token = await getAccessToken();
 
     if (!token) {
+      setLoading(false);
+      setCheckingPayment(false);
       return null;
     }
 
@@ -78,11 +111,30 @@ export default function AssinaturaPage() {
         },
       });
 
-      const data = (await response.json()) as BillingResponse;
+      const rawText = await response.text();
+      let data: BillingResponse = {};
+
+      try {
+        data = rawText ? (JSON.parse(rawText) as BillingResponse) : {};
+      } catch {
+        data = {
+          ok: false,
+          error: rawText || "Resposta inválida da rota de sincronização.",
+        };
+      }
 
       setEmpresaStatus(data.empresaStatus || null);
       setAssinaturaStatus(data.assinaturaStatus || null);
       setPaymentStatus(data.paymentStatus || null);
+
+      if (!response.ok) {
+        setDebugError(
+          data.error ||
+            `Erro HTTP ${response.status} ao consultar /api/billing/sync`
+        );
+        setMessage("Não foi possível consultar sua assinatura agora.");
+        return data;
+      }
 
       if (data.active) {
         setMessage("Pagamento confirmado. Acesso liberado.");
@@ -104,7 +156,11 @@ export default function AssinaturaPage() {
       );
 
       return data;
-    } catch {
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Erro desconhecido";
+
+      setDebugError(`Falha ao chamar /api/billing/sync: ${errorMessage}`);
       setMessage(
         "Não foi possível consultar o pagamento agora. Tente novamente em alguns segundos."
       );
@@ -116,14 +172,19 @@ export default function AssinaturaPage() {
   }
 
   async function startCheckout() {
+    setDebugError(null);
+    setPaymentLink(null);
+
     const token = await getAccessToken();
 
     if (!token) {
+      setStartingCheckout(false);
+      setLoading(false);
       return;
     }
 
     setStartingCheckout(true);
-    setMessage("Gerando cobrança segura...");
+    setMessage("Gerando cobrança segura no Asaas...");
 
     try {
       const response = await fetch("/api/billing/checkout", {
@@ -133,27 +194,54 @@ export default function AssinaturaPage() {
         },
       });
 
-      const data = (await response.json()) as BillingResponse;
+      const rawText = await response.text();
+      let data: BillingResponse = {};
+
+      try {
+        data = rawText ? (JSON.parse(rawText) as BillingResponse) : {};
+      } catch {
+        data = {
+          ok: false,
+          error: rawText || "Resposta inválida da rota de checkout.",
+        };
+      }
 
       if (!response.ok || !data.ok) {
-        setMessage(data.error || "Não foi possível gerar a cobrança.");
+        const errorText =
+          data.error ||
+          data.message ||
+          `Erro HTTP ${response.status} ao chamar /api/billing/checkout`;
+
+        setDebugError(errorText);
+        setMessage("Não foi possível gerar a cobrança.");
         return;
       }
 
       const link = data.paymentUrl || data.invoiceUrl || data.bankSlipUrl;
 
       if (!link) {
+        setDebugError(
+          "A cobrança foi criada, mas o Asaas não retornou link de pagamento."
+        );
         setMessage(
-          "Cobrança criada. Verifique seu e-mail para acessar o pagamento."
+          "Cobrança criada, mas não recebemos o link de pagamento. Verifique seu e-mail."
         );
         return;
       }
 
-      window.location.assign(link);
-    } catch {
+      setPaymentLink(link);
+      setMessage("Cobrança criada. Abrindo tela de pagamento...");
+
+      window.location.href = link;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Erro desconhecido";
+
+      setDebugError(`Falha ao chamar /api/billing/checkout: ${errorMessage}`);
       setMessage("Erro ao iniciar pagamento. Tente novamente.");
     } finally {
       setStartingCheckout(false);
+      setLoading(false);
     }
   }
 
@@ -298,6 +386,17 @@ export default function AssinaturaPage() {
                 ? "Verificando pagamento..."
                 : "Já paguei, verificar pagamento"}
             </button>
+
+            {paymentLink && (
+              <a
+                href={paymentLink}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 block w-full rounded-2xl bg-emerald-600 px-5 py-4 text-center text-sm font-bold text-white transition hover:bg-emerald-700"
+              >
+                Abrir pagamento do Asaas
+              </a>
+            )}
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
@@ -310,6 +409,17 @@ export default function AssinaturaPage() {
                 {loading ? "Carregando..." : message}
               </p>
             </div>
+
+            {debugError && (
+              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-700">
+                  Erro técnico
+                </p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-red-800">
+                  {debugError}
+                </p>
+              </div>
+            )}
 
             <div className="mt-6 space-y-3 text-sm text-slate-600">
               <div className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3">
