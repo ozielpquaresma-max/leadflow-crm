@@ -15,8 +15,6 @@ type BillingResponse = {
   bankSlipUrl?: string | null;
   message?: string;
   error?: string;
-  asaasStatusCode?: number;
-  asaasResponse?: unknown;
 };
 
 function createBrowserSupabaseClient() {
@@ -28,6 +26,34 @@ function createBrowserSupabaseClient() {
   }
 
   return createClient(supabaseUrl, supabaseKey);
+}
+
+function onlyNumbers(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function formatCpfCnpj(value: string) {
+  const numbers = onlyNumbers(value);
+
+  if (numbers.length <= 11) {
+    return numbers
+      .replace(/^(\d{3})(\d)/, "$1.$2")
+      .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/\.(\d{3})(\d)/, ".$1-$2")
+      .slice(0, 14);
+  }
+
+  return numbers
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2")
+    .slice(0, 18);
+}
+
+function isValidCpfCnpj(value: string) {
+  const numbers = onlyNumbers(value);
+  return numbers.length === 11 || numbers.length === 14;
 }
 
 export default function AssinaturaPage() {
@@ -44,6 +70,7 @@ export default function AssinaturaPage() {
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [paymentLink, setPaymentLink] = useState<string | null>(null);
 
+  const [cpfCnpj, setCpfCnpj] = useState("");
   const [message, setMessage] = useState("Verificando sua assinatura...");
   const [debugError, setDebugError] = useState<string | null>(null);
 
@@ -83,7 +110,7 @@ export default function AssinaturaPage() {
     }
 
     setDebugError(
-      "Sessão não encontrada no navegador. Faça logout e login novamente com e-mail e senha."
+      "Sessão não encontrada no navegador. Faça logout e login novamente."
     );
     setMessage("Sessão não encontrada. Saia e entre novamente.");
     return null;
@@ -175,6 +202,14 @@ export default function AssinaturaPage() {
     setDebugError(null);
     setPaymentLink(null);
 
+    const documento = onlyNumbers(cpfCnpj);
+
+    if (!isValidCpfCnpj(cpfCnpj)) {
+      setMessage("Informe um CPF ou CNPJ válido para gerar a cobrança.");
+      setDebugError("O Asaas exige CPF com 11 dígitos ou CNPJ com 14 dígitos.");
+      return;
+    }
+
     const token = await getAccessToken();
 
     if (!token) {
@@ -191,7 +226,12 @@ export default function AssinaturaPage() {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          cpfCnpj: documento,
+          documento,
+        }),
       });
 
       const rawText = await response.text();
@@ -353,9 +393,23 @@ export default function AssinaturaPage() {
             </div>
 
             <p className="mt-5 text-sm leading-6 text-slate-600">
-              Inclui painel de recuperação de vendas, leitura de eventos da
-              plataforma integrada, organização de pedidos e base de clientes.
+              Informe seu CPF ou CNPJ para gerar a cobrança segura pelo Asaas.
             </p>
+
+            <div className="mt-6">
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                CPF ou CNPJ
+              </label>
+              <input
+                value={cpfCnpj}
+                onChange={(event) =>
+                  setCpfCnpj(formatCpfCnpj(event.target.value))
+                }
+                inputMode="numeric"
+                placeholder="Digite seu CPF ou CNPJ"
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-4 text-sm outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+              />
+            </div>
 
             <div className="mt-6 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
               <p className="font-semibold text-slate-950">
