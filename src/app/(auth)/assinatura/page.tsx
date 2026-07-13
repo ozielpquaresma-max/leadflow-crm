@@ -33,22 +33,20 @@ function onlyNumbers(value: string) {
 }
 
 function formatCpfCnpj(value: string) {
-  const numbers = onlyNumbers(value);
+  const numbers = onlyNumbers(value).slice(0, 14);
 
   if (numbers.length <= 11) {
     return numbers
       .replace(/^(\d{3})(\d)/, "$1.$2")
       .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
-      .replace(/\.(\d{3})(\d)/, ".$1-$2")
-      .slice(0, 14);
+      .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3-$4");
   }
 
   return numbers
     .replace(/^(\d{2})(\d)/, "$1.$2")
     .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
-    .replace(/\.(\d{3})(\d)/, ".$1/$2")
-    .replace(/(\d{4})(\d)/, "$1-$2")
-    .slice(0, 18);
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3/$4")
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, "$1.$2.$3/$4-$5");
 }
 
 function isValidCpfCnpj(value: string) {
@@ -65,68 +63,40 @@ export default function AssinaturaPage() {
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [startingCheckout, setStartingCheckout] = useState(false);
 
+  const [cpfCnpj, setCpfCnpj] = useState("");
   const [empresaStatus, setEmpresaStatus] = useState<string | null>(null);
   const [assinaturaStatus, setAssinaturaStatus] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
-  const [paymentLink, setPaymentLink] = useState<string | null>(null);
+  const [technicalError, setTechnicalError] = useState<string | null>(null);
 
-  const [cpfCnpj, setCpfCnpj] = useState("");
   const [message, setMessage] = useState("Verificando sua assinatura...");
-  const [debugError, setDebugError] = useState<string | null>(null);
 
   const pagamentoSucesso = searchParams.get("pagamento") === "sucesso";
 
   async function getAccessToken() {
-    setDebugError(null);
-
     const {
       data: { session },
       error,
     } = await supabase.auth.getSession();
 
-    if (error) {
-      setDebugError(`Erro ao buscar sessão: ${error.message}`);
-      setMessage("Erro ao validar sua sessão. Saia e entre novamente.");
+    if (error || !session?.access_token) {
+      router.replace("/");
       return null;
     }
 
-    if (session?.access_token) {
-      return session.access_token;
-    }
-
-    const {
-      data: { session: refreshedSession },
-      error: refreshError,
-    } = await supabase.auth.refreshSession();
-
-    if (refreshError) {
-      setDebugError(`Erro ao atualizar sessão: ${refreshError.message}`);
-      setMessage("Sua sessão expirou. Saia e entre novamente.");
-      return null;
-    }
-
-    if (refreshedSession?.access_token) {
-      return refreshedSession.access_token;
-    }
-
-    setDebugError(
-      "Sessão não encontrada no navegador. Faça logout e login novamente."
-    );
-    setMessage("Sessão não encontrada. Saia e entre novamente.");
-    return null;
+    return session.access_token;
   }
 
   async function syncBilling(options?: { silent?: boolean }) {
     const token = await getAccessToken();
 
     if (!token) {
-      setLoading(false);
-      setCheckingPayment(false);
       return null;
     }
 
     if (!options?.silent) {
       setCheckingPayment(true);
+      setTechnicalError(null);
       setMessage("Consultando o pagamento diretamente no Asaas...");
     }
 
@@ -138,30 +108,11 @@ export default function AssinaturaPage() {
         },
       });
 
-      const rawText = await response.text();
-      let data: BillingResponse = {};
-
-      try {
-        data = rawText ? (JSON.parse(rawText) as BillingResponse) : {};
-      } catch {
-        data = {
-          ok: false,
-          error: rawText || "Resposta inválida da rota de sincronização.",
-        };
-      }
+      const data = (await response.json()) as BillingResponse;
 
       setEmpresaStatus(data.empresaStatus || null);
       setAssinaturaStatus(data.assinaturaStatus || null);
       setPaymentStatus(data.paymentStatus || null);
-
-      if (!response.ok) {
-        setDebugError(
-          data.error ||
-            `Erro HTTP ${response.status} ao consultar /api/billing/sync`
-        );
-        setMessage("Não foi possível consultar sua assinatura agora.");
-        return data;
-      }
 
       if (data.active) {
         setMessage("Pagamento confirmado. Acesso liberado.");
@@ -183,11 +134,7 @@ export default function AssinaturaPage() {
       );
 
       return data;
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Erro desconhecido";
-
-      setDebugError(`Falha ao chamar /api/billing/sync: ${errorMessage}`);
+    } catch {
       setMessage(
         "Não foi possível consultar o pagamento agora. Tente novamente em alguns segundos."
       );
@@ -199,27 +146,23 @@ export default function AssinaturaPage() {
   }
 
   async function startCheckout() {
-    setDebugError(null);
-    setPaymentLink(null);
-
-    const documento = onlyNumbers(cpfCnpj);
-
-    if (!isValidCpfCnpj(cpfCnpj)) {
-      setMessage("Informe um CPF ou CNPJ válido para gerar a cobrança.");
-      setDebugError("O Asaas exige CPF com 11 dígitos ou CNPJ com 14 dígitos.");
-      return;
-    }
-
     const token = await getAccessToken();
 
     if (!token) {
-      setStartingCheckout(false);
-      setLoading(false);
+      return;
+    }
+
+    const documento = onlyNumbers(cpfCnpj);
+
+    if (!isValidCpfCnpj(documento)) {
+      setTechnicalError(null);
+      setMessage("Informe um CPF ou CNPJ válido para gerar a cobrança.");
       return;
     }
 
     setStartingCheckout(true);
-    setMessage("Gerando cobrança segura no Asaas...");
+    setTechnicalError(null);
+    setMessage("Gerando cobrança segura...");
 
     try {
       const response = await fetch("/api/billing/checkout", {
@@ -230,58 +173,33 @@ export default function AssinaturaPage() {
         },
         body: JSON.stringify({
           cpfCnpj: documento,
-          documento,
+          billingType: "UNDEFINED",
         }),
       });
 
-      const rawText = await response.text();
-      let data: BillingResponse = {};
-
-      try {
-        data = rawText ? (JSON.parse(rawText) as BillingResponse) : {};
-      } catch {
-        data = {
-          ok: false,
-          error: rawText || "Resposta inválida da rota de checkout.",
-        };
-      }
+      const data = (await response.json()) as BillingResponse;
 
       if (!response.ok || !data.ok) {
-        const errorText =
-          data.error ||
-          data.message ||
-          `Erro HTTP ${response.status} ao chamar /api/billing/checkout`;
-
-        setDebugError(errorText);
-        setMessage("Não foi possível gerar a cobrança.");
+        setMessage(data.error || "Não foi possível gerar a cobrança.");
+        setTechnicalError(data.error || "Erro inesperado ao criar cobrança.");
         return;
       }
 
       const link = data.paymentUrl || data.invoiceUrl || data.bankSlipUrl;
 
       if (!link) {
-        setDebugError(
-          "A cobrança foi criada, mas o Asaas não retornou link de pagamento."
-        );
         setMessage(
-          "Cobrança criada, mas não recebemos o link de pagamento. Verifique seu e-mail."
+          "Cobrança criada. Verifique seu e-mail para acessar o pagamento."
         );
         return;
       }
 
-      setPaymentLink(link);
-      setMessage("Cobrança criada. Abrindo tela de pagamento...");
-
-      window.location.href = link;
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Erro desconhecido";
-
-      setDebugError(`Falha ao chamar /api/billing/checkout: ${errorMessage}`);
-      setMessage("Erro ao iniciar pagamento. Tente novamente.");
+      window.location.assign(link);
+    } catch {
+      setMessage("Não foi possível gerar a cobrança.");
+      setTechnicalError("Erro inesperado ao criar cobrança.");
     } finally {
       setStartingCheckout(false);
-      setLoading(false);
     }
   }
 
@@ -393,23 +311,25 @@ export default function AssinaturaPage() {
             </div>
 
             <p className="mt-5 text-sm leading-6 text-slate-600">
-              Informe seu CPF ou CNPJ para gerar a cobrança segura pelo Asaas.
+              Inclui painel de recuperação de vendas, leitura de eventos da
+              plataforma integrada, organização de pedidos e base de clientes.
             </p>
 
-            <div className="mt-6">
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                CPF ou CNPJ
-              </label>
-              <input
-                value={cpfCnpj}
-                onChange={(event) =>
-                  setCpfCnpj(formatCpfCnpj(event.target.value))
-                }
-                inputMode="numeric"
-                placeholder="Digite seu CPF ou CNPJ"
-                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-4 text-sm outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
-              />
-            </div>
+            <label className="mt-6 block text-sm font-semibold text-slate-800">
+              CPF ou CNPJ para cobrança
+            </label>
+
+            <input
+              value={cpfCnpj}
+              onChange={(event) => setCpfCnpj(formatCpfCnpj(event.target.value))}
+              inputMode="numeric"
+              placeholder="Digite seu CPF ou CNPJ"
+              className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base font-semibold text-slate-950 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+            />
+
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              Usado apenas para gerar a cobrança da assinatura.
+            </p>
 
             <div className="mt-6 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
               <p className="font-semibold text-slate-950">
@@ -440,17 +360,6 @@ export default function AssinaturaPage() {
                 ? "Verificando pagamento..."
                 : "Já paguei, verificar pagamento"}
             </button>
-
-            {paymentLink && (
-              <a
-                href={paymentLink}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 block w-full rounded-2xl bg-emerald-600 px-5 py-4 text-center text-sm font-bold text-white transition hover:bg-emerald-700"
-              >
-                Abrir pagamento do Asaas
-              </a>
-            )}
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
@@ -464,13 +373,13 @@ export default function AssinaturaPage() {
               </p>
             </div>
 
-            {debugError && (
-              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-700">
+            {technicalError && (
+              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4">
+                <p className="text-xs font-black uppercase tracking-[0.25em] text-red-700">
                   Erro técnico
                 </p>
-                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-red-800">
-                  {debugError}
+                <p className="mt-2 text-sm leading-6 text-red-700">
+                  {technicalError}
                 </p>
               </div>
             )}
