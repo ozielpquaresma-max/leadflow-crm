@@ -54,7 +54,7 @@ export const metadata = {
 
 export default function VendaPage() {
   return (
-    <main className="min-h-screen bg-[#f6f8ff] text-slate-950">
+    <main className="sales-page min-h-screen bg-[#f6f8ff] text-slate-950">
       <section className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_35%),linear-gradient(135deg,#ffffff_0%,#eef4ff_45%,#eaf1ff_100%)]">
         <div className="mx-auto grid min-h-screen w-full max-w-7xl items-center gap-12 px-5 py-10 md:grid-cols-[1fr_0.95fr] md:px-8 lg:px-10">
           <div>
@@ -75,7 +75,7 @@ export default function VendaPage() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
                 href="/"
-                className="rounded-2xl bg-blue-700 px-7 py-4 text-center text-base font-black text-white shadow-lg shadow-blue-700/20 transition hover:bg-blue-800"
+                className="sales-cta-pulse rounded-2xl bg-blue-700 px-7 py-4 text-center text-base font-black text-white shadow-lg shadow-blue-700/20 transition hover:bg-blue-800"
               >
                 Criar minha conta agora
               </Link>
@@ -95,9 +95,9 @@ export default function VendaPage() {
           </div>
 
           <div className="relative">
-            <div className="absolute -inset-4 rounded-[2rem] bg-blue-500/10 blur-2xl" />
+            <div className="sales-glow absolute -inset-4 rounded-[2rem] bg-blue-500/10 blur-2xl" />
 
-            <div className="relative rounded-[2rem] border border-white bg-white/90 p-4 shadow-2xl shadow-blue-950/10 backdrop-blur">
+            <div className="mockup-card relative rounded-[2rem] border border-white bg-white/90 p-4 shadow-2xl shadow-blue-950/10 backdrop-blur">
               <div className="rounded-[1.5rem] bg-slate-950 p-4 text-white">
                 <div className="mb-5 flex items-center justify-between">
                   <div>
@@ -199,7 +199,7 @@ export default function VendaPage() {
           </div>
 
           <div className="mt-12 grid gap-4 md:grid-cols-3">
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+            <div className="sales-card-motion rounded-3xl border border-slate-200 bg-slate-50 p-6">
               <p className="text-3xl font-black text-blue-700">01</p>
               <h3 className="mt-4 text-xl font-black">Pix não pago</h3>
               <p className="mt-3 leading-7 text-slate-600">
@@ -208,7 +208,7 @@ export default function VendaPage() {
               </p>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+            <div className="sales-card-motion rounded-3xl border border-slate-200 bg-slate-50 p-6">
               <p className="text-3xl font-black text-blue-700">02</p>
               <h3 className="mt-4 text-xl font-black">Cartão recusado</h3>
               <p className="mt-3 leading-7 text-slate-600">
@@ -217,7 +217,7 @@ export default function VendaPage() {
               </p>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+            <div className="sales-card-motion rounded-3xl border border-slate-200 bg-slate-50 p-6">
               <p className="text-3xl font-black text-blue-700">03</p>
               <h3 className="mt-4 text-xl font-black">Checkout abandonado</h3>
               <p className="mt-3 leading-7 text-slate-600">
@@ -246,7 +246,7 @@ export default function VendaPage() {
             <div className="mt-8">
               <Link
                 href="/"
-                className="inline-flex rounded-2xl bg-blue-700 px-7 py-4 text-base font-black text-white shadow-lg shadow-blue-700/20 transition hover:bg-blue-800"
+                className="inline-flex rounded-2xl bg-blue-700 px-7 py-4 text-base font-black text-white shadow-lg shadow-blue-700/20 transition duration-300 hover:-translate-y-1 hover:bg-blue-800 hover:shadow-xl"
               >
                 Começar agora por R$49/mês
               </Link>
@@ -257,7 +257,7 @@ export default function VendaPage() {
             {beneficios.map((beneficio) => (
               <div
                 key={beneficio}
-                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                className="sales-card-motion rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
               >
                 <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-lg font-black text-blue-700">
                   ✓
@@ -286,7 +286,7 @@ export default function VendaPage() {
             {etapas.map((etapa, index) => (
               <div
                 key={etapa.titulo}
-                className="rounded-3xl border border-slate-200 bg-slate-50 p-6"
+                className="sales-card-motion rounded-3xl border border-slate-200 bg-slate-50 p-6"
               >
                 <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-700 text-lg font-black text-white">
                   {index + 1}
@@ -324,7 +324,7 @@ export default function VendaPage() {
 
               <Link
                 href="/"
-                className="mt-6 block rounded-2xl bg-blue-700 px-6 py-4 text-center text-base font-black text-white transition hover:bg-blue-800"
+                className="mt-6 block rounded-2xl bg-blue-700 px-6 py-4 text-center text-base font-black text-white transition duration-300 hover:-translate-y-1 hover:bg-blue-800 hover:shadow-xl"
               >
                 Criar minha conta
               </Link>
@@ -353,7 +353,7 @@ export default function VendaPage() {
             {faqs.map((faq) => (
               <div
                 key={faq.pergunta}
-                className="rounded-3xl border border-slate-200 bg-slate-50 p-6"
+                className="sales-card-motion rounded-3xl border border-slate-200 bg-slate-50 p-6"
               >
                 <h3 className="text-lg font-black">{faq.pergunta}</h3>
                 <p className="mt-3 leading-7 text-slate-600">{faq.resposta}</p>
@@ -375,7 +375,7 @@ export default function VendaPage() {
 
           <Link
             href="/"
-            className="mt-8 inline-flex rounded-2xl bg-white px-8 py-4 text-base font-black text-blue-700 transition hover:bg-blue-50"
+            className="mt-8 inline-flex rounded-2xl bg-white px-8 py-4 text-base font-black text-blue-700 transition duration-300 hover:-translate-y-1 hover:bg-blue-50 hover:shadow-xl"
           >
             Criar minha conta no ReyCart
           </Link>
@@ -384,3 +384,5 @@ export default function VendaPage() {
     </main>
   );
 }
+
+
