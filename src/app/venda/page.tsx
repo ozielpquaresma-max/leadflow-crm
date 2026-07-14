@@ -54,7 +54,7 @@ export const metadata = {
 
 export default function VendaPage() {
   return (
-    <main className="sales-page min-h-screen bg-[#f6f8ff] text-slate-950">
+    <main data-sales-page="true" className="min-h-screen overflow-x-hidden bg-[#f6f8ff] text-slate-950">
       <section className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_35%),linear-gradient(135deg,#ffffff_0%,#eef4ff_45%,#eaf1ff_100%)]">
         <div className="mx-auto grid min-h-screen w-full max-w-7xl items-center gap-12 px-5 py-10 md:grid-cols-[1fr_0.95fr] md:px-8 lg:px-10">
           <div>
@@ -384,5 +384,7 @@ export default function VendaPage() {
     </main>
   );
 }
+
+
 
 
