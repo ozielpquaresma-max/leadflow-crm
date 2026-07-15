@@ -94,3 +94,343 @@ button {
 img {
   @apply border-none;
 }
+
+/* ReyCart sales page animations */
+@keyframes salesTabletFloat {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotateX(0.5deg);
+  }
+  50% {
+    transform: translate3d(0, -8px, 0) rotateX(0deg);
+  }
+}
+
+@keyframes salesGlowPulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes salesDashboardFrame {
+  0%,
+  29% {
+    opacity: 1;
+    transform: scale(1.015) translate3d(0, 0, 0);
+  }
+  35%,
+  94% {
+    opacity: 0;
+    transform: scale(1.055) translate3d(-1.2%, -0.8%, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.015) translate3d(0, 0, 0);
+  }
+}
+
+@keyframes salesInsightsFrame {
+  0%,
+  27% {
+    opacity: 0;
+    transform: scale(1.045) translate3d(1%, 0, 0);
+  }
+  34%,
+  61% {
+    opacity: 1;
+    transform: scale(1.015) translate3d(0, -0.6%, 0);
+  }
+  68%,
+  100% {
+    opacity: 0;
+    transform: scale(1.05) translate3d(-1%, -1%, 0);
+  }
+}
+
+@keyframes salesRecoveryFrame {
+  0%,
+  60% {
+    opacity: 0;
+    transform: scale(1.05) translate3d(1%, 0, 0);
+  }
+  67%,
+  94% {
+    opacity: 1;
+    transform: scale(1.015) translate3d(0, -0.5%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.045) translate3d(-1%, -1%, 0);
+  }
+}
+
+@keyframes salesScreenProgress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes salesLiveDotPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+  }
+}
+
+@keyframes salesCtaPulse {
+  0%,
+  100% {
+    box-shadow: 0 12px 30px rgba(29, 78, 216, 0.2);
+  }
+  50% {
+    box-shadow: 0 15px 38px rgba(29, 78, 216, 0.34);
+  }
+}
+
+.sales-glow {
+  animation: salesGlowPulse 5s ease-in-out infinite;
+}
+
+.sales-tablet-shell {
+  perspective: 1400px;
+}
+
+.sales-tablet-device {
+  position: relative;
+  z-index: 2;
+  padding: 14px 18px 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 30px;
+  background:
+    linear-gradient(145deg, #273449 0%, #0f172a 48%, #020617 100%);
+  box-shadow:
+    0 30px 70px rgba(15, 23, 42, 0.28),
+    0 10px 25px rgba(37, 99, 235, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+  transform-origin: center;
+  animation: salesTabletFloat 6s ease-in-out infinite;
+}
+
+.sales-tablet-device::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.14),
+    transparent 24%,
+    transparent 78%,
+    rgba(255, 255, 255, 0.06)
+  );
+}
+
+.sales-tablet-camera {
+  position: absolute;
+  z-index: 5;
+  top: 5px;
+  left: 50%;
+  width: 42px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.38);
+  transform: translateX(-50%);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.sales-tablet-screen {
+  position: relative;
+  aspect-ratio: 2.08 / 1;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  border-radius: 18px;
+  background: #eef2f7;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 2px 10px rgba(2, 6, 23, 0.45);
+  isolation: isolate;
+}
+
+.sales-screen-image {
+  object-fit: cover;
+  object-position: left top;
+  opacity: 0;
+  will-change: opacity, transform;
+  filter: saturate(0.98) contrast(1.01);
+}
+
+.sales-screen-image-dashboard {
+  z-index: 1;
+  opacity: 1;
+  animation: salesDashboardFrame 18s ease-in-out infinite;
+}
+
+.sales-screen-image-insights {
+  z-index: 2;
+  object-position: 32% 22%;
+  animation: salesInsightsFrame 18s ease-in-out infinite;
+}
+
+.sales-screen-image-recovery {
+  z-index: 3;
+  animation: salesRecoveryFrame 18s ease-in-out infinite;
+}
+
+.sales-screen-shine {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.16), transparent 20%),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04), transparent 26%);
+}
+
+.sales-screen-badge {
+  position: absolute;
+  z-index: 8;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  padding: 6px 10px;
+  color: #0f172a;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.13);
+  backdrop-filter: blur(10px);
+}
+
+.sales-screen-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #22c55e;
+  animation: salesLiveDotPulse 1.8s ease-in-out infinite;
+}
+
+.sales-screen-progress {
+  position: absolute;
+  z-index: 8;
+  right: 12px;
+  bottom: 10px;
+  left: 12px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 1px 6px rgba(15, 23, 42, 0.12);
+}
+
+.sales-screen-progress span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transform-origin: left center;
+  animation: salesScreenProgress 18s linear infinite;
+}
+
+.sales-tablet-base {
+  position: relative;
+  z-index: 1;
+  width: 82%;
+  height: 12px;
+  margin: -2px auto 0;
+  border-radius: 0 0 50% 50%;
+  background: linear-gradient(to bottom, #94a3b8, #475569 75%, #334155);
+  box-shadow: 0 18px 26px rgba(15, 23, 42, 0.2);
+}
+
+.sales-tablet-base::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 50%;
+  width: 18%;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.7);
+  transform: translateX(-50%);
+}
+
+.sales-cta-pulse {
+  animation: salesCtaPulse 2.8s ease-in-out infinite;
+}
+
+.sales-card-motion {
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+.sales-card-motion:hover {
+  transform: translateY(-4px);
+  border-color: #bfdbfe;
+  box-shadow: 0 18px 34px rgba(37, 99, 235, 0.1);
+}
+
+@media (max-width: 640px) {
+  .sales-tablet-device {
+    padding: 10px 11px 13px;
+    border-radius: 22px;
+  }
+
+  .sales-tablet-screen {
+    border-radius: 13px;
+  }
+
+  .sales-tablet-camera {
+    top: 3px;
+    width: 30px;
+    height: 3px;
+  }
+
+  .sales-screen-badge {
+    top: 6px;
+    left: 6px;
+    padding: 5px 8px;
+    font-size: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sales-glow,
+  .sales-tablet-device,
+  .sales-screen-live-dot,
+  .sales-screen-progress span,
+  .sales-cta-pulse {
+    animation: none !important;
+  }
+
+  .sales-screen-image {
+    animation: none !important;
+    opacity: 0;
+    transform: none;
+  }
+
+  .sales-screen-image-dashboard {
+    opacity: 1;
+  }
+}

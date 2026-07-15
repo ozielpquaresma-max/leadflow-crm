@@ -1,4 +1,5 @@
-﻿import Link from "next/link";
+import Link from "next/link";
+import SalesTabletDemo from "./SalesTabletDemo";
 
 const beneficios = [
   "Visualize Pix gerados e ainda não pagos",
@@ -94,90 +95,7 @@ export default function VendaPage() {
             </p>
           </div>
 
-          <div className="relative">
-            <div className="sales-glow absolute -inset-4 rounded-[2rem] bg-blue-500/10 blur-2xl" />
-
-            <div className="mockup-card relative rounded-[2rem] border border-white bg-white/90 p-4 shadow-2xl shadow-blue-950/10 backdrop-blur">
-              <div className="rounded-[1.5rem] bg-slate-950 p-4 text-white">
-                <div className="mb-5 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-bold text-blue-300">ReyCart</p>
-                    <h2 className="text-xl font-black">
-                      Painel de recuperação
-                    </h2>
-                  </div>
-
-                  <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-bold text-emerald-300">
-                    Online
-                  </span>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl bg-white/10 p-4">
-                    <p className="text-xs text-slate-300">Pix pendente</p>
-                    <p className="mt-2 text-2xl font-black">18</p>
-                    <p className="mt-1 text-xs text-blue-200">R$ 2.430</p>
-                  </div>
-
-                  <div className="rounded-2xl bg-white/10 p-4">
-                    <p className="text-xs text-slate-300">Cartão recusado</p>
-                    <p className="mt-2 text-2xl font-black">7</p>
-                    <p className="mt-1 text-xs text-blue-200">R$ 890</p>
-                  </div>
-
-                  <div className="rounded-2xl bg-white/10 p-4">
-                    <p className="text-xs text-slate-300">Abandonados</p>
-                    <p className="mt-2 text-2xl font-black">12</p>
-                    <p className="mt-1 text-xs text-blue-200">R$ 1.620</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-2xl bg-white p-4 text-slate-950">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="font-black">Oportunidades recentes</p>
-                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                      Hoje
-                    </span>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
-                      <div>
-                        <p className="font-bold">Livro Digital</p>
-                        <p className="text-xs text-slate-500">Pix pendente</p>
-                      </div>
-                      <strong className="text-blue-700">R$ 97</strong>
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
-                      <div>
-                        <p className="font-bold">Mentoria Online</p>
-                        <p className="text-xs text-slate-500">
-                          Cartão recusado
-                        </p>
-                      </div>
-                      <strong className="text-blue-700">R$ 497</strong>
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
-                      <div>
-                        <p className="font-bold">Curso Gravado</p>
-                        <p className="text-xs text-slate-500">
-                          Checkout abandonado
-                        </p>
-                      </div>
-                      <strong className="text-blue-700">R$ 197</strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <p className="mt-4 text-center text-xs text-slate-500">
-              Imagem ilustrativa do painel. Os resultados dependem da operação
-              de cada vendedor.
-            </p>
-          </div>
+          <SalesTabletDemo />
         </div>
       </section>
 
