@@ -48,22 +48,19 @@ export default function SalesTabletDemo() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative w-full min-w-0 max-w-full">
       <div
-        className="sales-glow absolute -inset-6 rounded-[2.5rem] bg-blue-500/20 blur-3xl"
+        className="sales-glow absolute -inset-2 rounded-[2rem] bg-blue-500/20 blur-2xl sm:-inset-6 sm:rounded-[2.5rem] sm:blur-3xl"
         aria-hidden="true"
       />
 
-      <div className="sales-tablet-shell relative mx-auto w-full max-w-[720px]">
-        <div className="sales-tablet-device relative z-[2] w-full overflow-hidden rounded-[30px] border border-white/70 bg-slate-950 p-[14px] pb-[18px] shadow-2xl">
+      <div className="sales-tablet-shell relative mx-auto w-full min-w-0 max-w-[720px]">
+        <div className="sales-tablet-device relative z-[2] box-border w-full min-w-0 max-w-full overflow-hidden rounded-[30px] border border-white/70 bg-slate-950 p-[14px] pb-[18px] shadow-2xl">
           <span className="sales-tablet-camera" aria-hidden="true" />
 
           <div
             className="sales-tablet-screen relative w-full overflow-hidden rounded-[18px] border border-slate-300/40 bg-slate-100 shadow-inner"
-            style={{
-              aspectRatio: "2.19 / 1",
-              height: "clamp(180px, 24vw, 330px)",
-            }}
+            style={{ aspectRatio: "2.19 / 1" }}
           >
             {telas.map((tela, indice) => {
               const ativa = telaAtiva === indice;
@@ -111,7 +108,7 @@ export default function SalesTabletDemo() {
         <div className="sales-tablet-base" aria-hidden="true" />
       </div>
 
-      <div className="mt-5 flex flex-wrap justify-center gap-2 text-xs font-bold">
+      <div className="mt-4 flex w-full min-w-0 flex-wrap justify-center gap-2 text-[11px] font-bold sm:mt-5 sm:text-xs">
         {telas.map((tela, indice) => {
           const ativa = telaAtiva === indice;
 
@@ -121,7 +118,7 @@ export default function SalesTabletDemo() {
               type="button"
               onClick={() => selecionarTela(indice)}
               aria-pressed={ativa}
-              className={`rounded-full border px-3 py-1.5 shadow-sm transition duration-300 ${
+              className={`max-w-full rounded-full border px-2.5 py-1.5 shadow-sm transition duration-300 sm:px-3 ${
                 ativa
                   ? "border-blue-600 bg-blue-700 text-white shadow-blue-500/20"
                   : "border-blue-100 bg-white/90 text-slate-600 hover:border-blue-300 hover:text-blue-700"
@@ -133,7 +130,7 @@ export default function SalesTabletDemo() {
         })}
       </div>
 
-      <p className="mt-3 text-center text-xs leading-5 text-slate-500">
+      <p className="mx-auto mt-3 max-w-full px-1 text-center text-[11px] leading-5 text-slate-500 sm:px-0 sm:text-xs">
         Telas reais do ReyCart com dados pessoais protegidos. A demonstração
         alterna automaticamente entre as áreas do sistema.
       </p>
