@@ -1,5 +1,5 @@
+import Image from "next/image";
 import Link from "next/link";
-import SalesTabletDemo from "./SalesTabletDemo";
 
 const beneficios = [
   "Visualize Pix gerados e ainda não pagos",
@@ -55,15 +55,18 @@ export const metadata = {
 
 export default function VendaPage() {
   return (
-    <main data-sales-page="true" className="min-h-screen overflow-x-hidden bg-[#f6f8ff] text-slate-950">
+    <main
+      data-sales-page="true"
+      className="min-h-screen overflow-x-hidden bg-[#f6f8ff] text-slate-950"
+    >
       <section className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_35%),linear-gradient(135deg,#ffffff_0%,#eef4ff_45%,#eaf1ff_100%)]">
-        <div className="mx-auto grid min-h-screen w-full max-w-7xl items-center gap-12 px-5 py-10 md:grid-cols-[1fr_0.95fr] md:px-8 lg:px-10">
+        <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-5 py-12 md:grid-cols-[0.9fr_1.1fr] md:px-8 md:py-16 lg:gap-14 lg:px-10">
           <div>
             <div className="mb-6 inline-flex rounded-full border border-blue-200 bg-white/80 px-4 py-2 text-sm font-bold text-blue-700 shadow-sm">
               ReyCart • Recuperação de oportunidades
             </div>
 
-            <h1 className="max-w-3xl text-4xl font-black tracking-tight text-slate-950 md:text-6xl">
+            <h1 className="max-w-3xl text-4xl font-black tracking-tight text-slate-950 md:text-5xl lg:text-6xl">
               Pare de perder vendas que ficaram pelo caminho
             </h1>
 
@@ -95,7 +98,17 @@ export default function VendaPage() {
             </p>
           </div>
 
-          <SalesTabletDemo />
+          <div className="mx-auto w-full max-w-[560px] md:max-w-none">
+            <Image
+              src="/venda/reycart-integracao-kiwify.webp"
+              alt="Integração do ReyCart com a Kiwify e painel de oportunidades"
+              width={1122}
+              height={1402}
+              priority
+              sizes="(max-width: 767px) 100vw, 54vw"
+              className="h-auto w-full rounded-[2rem] shadow-2xl shadow-blue-950/15"
+            />
+          </div>
         </div>
       </section>
 
@@ -148,43 +161,50 @@ export default function VendaPage() {
       </section>
 
       <section className="px-5 py-20 md:px-8">
-        <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[0.9fr_1.1fr] md:items-center">
+        <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[0.82fr_1.18fr] md:items-center">
           <div>
             <p className="text-sm font-black uppercase tracking-[0.2em] text-blue-700">
               A solução
             </p>
             <h2 className="mt-4 text-3xl font-black tracking-tight md:text-5xl">
-              Um painel simples para organizar oportunidades de recuperação
+              Centralize cada oportunidade em um só painel
             </h2>
             <p className="mt-5 text-lg leading-8 text-slate-600">
-              O ReyCart centraliza informações importantes para quem vende
-              online e quer acompanhar melhor pedidos não finalizados.
+              Veja pedidos pendentes, identifique o que exige atenção e acione o
+              WhatsApp sem depender de informações espalhadas.
             </p>
 
-            <div className="mt-8">
-              <Link
-                href="/"
-                className="inline-flex rounded-2xl bg-blue-700 px-7 py-4 text-base font-black text-white shadow-lg shadow-blue-700/20 transition duration-300 hover:-translate-y-1 hover:bg-blue-800 hover:shadow-xl"
-              >
-                Começar agora por R$49/mês
-              </Link>
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+              {beneficios.slice(0, 4).map((beneficio) => (
+                <div
+                  key={beneficio}
+                  className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm"
+                >
+                  <p className="font-bold leading-6 text-slate-800">
+                    <span className="mr-2 text-blue-700">✓</span>
+                    {beneficio}
+                  </p>
+                </div>
+              ))}
             </div>
+
+            <Link
+              href="/"
+              className="mt-8 inline-flex rounded-2xl bg-blue-700 px-7 py-4 text-base font-black text-white shadow-lg shadow-blue-700/20 transition duration-300 hover:-translate-y-1 hover:bg-blue-800 hover:shadow-xl"
+            >
+              Começar agora por R$49/mês
+            </Link>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {beneficios.map((beneficio) => (
-              <div
-                key={beneficio}
-                className="sales-card-motion rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
-              >
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-lg font-black text-blue-700">
-                  ✓
-                </div>
-                <p className="font-bold leading-7 text-slate-800">
-                  {beneficio}
-                </p>
-              </div>
-            ))}
+          <div className="mx-auto w-full max-w-[620px]">
+            <Image
+              src="/venda/reycart-novas-conversoes.webp"
+              alt="ReyCart transformando oportunidades em novas conversões"
+              width={1122}
+              height={1402}
+              sizes="(max-width: 767px) 100vw, 55vw"
+              className="h-auto w-full rounded-[2rem] shadow-2xl shadow-blue-950/10"
+            />
           </div>
         </div>
       </section>
@@ -215,6 +235,50 @@ export default function VendaPage() {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-20 md:px-8">
+        <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1.15fr_0.85fr] md:items-center">
+          <div className="mx-auto w-full max-w-[620px] md:order-1">
+            <Image
+              src="/venda/reycart-recuperacao-whatsapp.webp"
+              alt="Recuperação de clientes pelo WhatsApp usando o ReyCart"
+              width={1122}
+              height={1402}
+              sizes="(max-width: 767px) 100vw, 55vw"
+              className="h-auto w-full rounded-[2rem] shadow-2xl shadow-blue-950/10"
+            />
+          </div>
+
+          <div className="md:order-2">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-blue-700">
+              Ação comercial
+            </p>
+            <h2 className="mt-4 text-3xl font-black tracking-tight md:text-5xl">
+              Fale com o cliente enquanto a intenção de compra está ativa
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-slate-600">
+              Abra o contato pelo WhatsApp a partir da própria oportunidade e retome
+              a conversa com mais contexto e rapidez.
+            </p>
+
+            <div className="mt-8 space-y-4">
+              {beneficios.slice(4).map((beneficio) => (
+                <div
+                  key={beneficio}
+                  className="sales-card-motion rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-lg font-black text-blue-700">
+                    ✓
+                  </div>
+                  <p className="font-bold leading-7 text-slate-800">
+                    {beneficio}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -302,7 +366,3 @@ export default function VendaPage() {
     </main>
   );
 }
-
-
-
-
